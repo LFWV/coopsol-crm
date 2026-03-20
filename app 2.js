@@ -1,12 +1,12 @@
 // ---- FIREBASE / CLOUD DATABASE ----
 const firebaseConfig = {
-  apiKey: "AIzaSyA4ZWCLf1WlWlrZDJDuSQMN_fpRGScLL1w",
-  authDomain: "coopsol.firebaseapp.com",
-  projectId: "coopsol",
-  storageBucket: "coopsol.firebasestorage.app",
-  messagingSenderId: "300639059020",
-  appId: "1:300639059020:web:8e9555965206eb979c88e9",
-  measurementId: "G-8PGKW6BBEP"
+    apiKey: "AIzaSyA4ZWCLf1WlWlrZDJDuSQMN_fpRGScLL1w",
+    authDomain: "coopsol.firebaseapp.com",
+    projectId: "coopsol",
+    storageBucket: "coopsol.firebasestorage.app",
+    messagingSenderId: "300639059020",
+    appId: "1:300639059020:web:8e9555965206eb979c88e9",
+    measurementId: "G-8PGKW6BBEP"
 };
 firebase.initializeApp(firebaseConfig);
 const firestore = firebase.firestore();
@@ -127,7 +127,7 @@ const auth = {
 };
 
 // ---- UTILS ----
-const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', {style: 'currency', currency: 'BRL'}).format(val);
+const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
 // ---- THEME ----
 (function initTheme() {
@@ -140,41 +140,40 @@ window.toggleTheme = () => {
     const next = current === 'dark' ? 'light' : 'dark';
     document.body.setAttribute('data-theme', next);
     localStorage.setItem('crm_theme', next);
-    // Sync all checkboxes on page
     document.querySelectorAll('.theme-switch input').forEach(cb => { cb.checked = next === 'dark'; });
 };
 
-// ---- ROUTER ----
+
 async function navigate(route, data = null) {
     const app = document.getElementById('app');
-    
-    if(route === 'login') app.innerHTML = ViewLogin();
-    else if(route === 'register') app.innerHTML = ViewRegister();
-    else if(route === 'dashboard') {
-        if(!currentUser) return navigate('login');
+
+    if (route === 'login') app.innerHTML = ViewLogin();
+    else if (route === 'register') app.innerHTML = ViewRegister();
+    else if (route === 'dashboard') {
+        if (!currentUser) return navigate('login');
         app.innerHTML = '<div style="text-align:center; padding: 3rem; font-size: 1.2rem; color: var(--text-main);">Carregando dados na Nuvem...</div>';
         app.innerHTML = await ViewDashboard();
     }
-    else if(route === 'simulation') {
-        if(!currentUser) return navigate('login');
+    else if (route === 'simulation') {
+        if (!currentUser) return navigate('login');
         app.innerHTML = ViewSimulation(data);
     }
-    else if(route === 'quickSim') {
-        if(!currentUser) return navigate('login');
+    else if (route === 'quickSim') {
+        if (!currentUser) return navigate('login');
         app.innerHTML = ViewQuickSim();
     }
-    else if(route === 'commissions') {
-        if(!currentUser) return navigate('login');
+    else if (route === 'commissions') {
+        if (!currentUser) return navigate('login');
         app.innerHTML = '<div style="text-align:center; padding: 3rem; font-size: 1.2rem; color: var(--text-main);">Calculando comissões na Nuvem...</div>';
         app.innerHTML = await ViewCommissions();
     }
-    else if(route === 'gallery') {
-        if(!currentUser) return navigate('login');
+    else if (route === 'gallery') {
+        if (!currentUser) return navigate('login');
         app.innerHTML = '<div style="text-align:center; padding: 3rem; font-size: 1.2rem; color: var(--text-main);">Carregando Feed de Contas...</div>';
         app.innerHTML = await ViewGallery();
     }
-    else if(route === 'clientView') {
-        if(!currentUser) return navigate('login');
+    else if (route === 'clientView') {
+        if (!currentUser) return navigate('login');
         app.innerHTML = ViewClientDetailsOnly(data);
     }
 }
@@ -273,14 +272,14 @@ const ViewDashboard = async () => {
     const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
     const allClients = await db.getClients();
     const users = isAdmin ? await db.getUsers() : [];
-    
+
     const clients = isAdmin ? allClients : allClients.filter(c => c.sellerId === currentUser.id);
     const activeClients = clients.filter(c => c.status !== 'Perdida' && c.status !== 'Desativado');
     const total = activeClients.length;
     const converted = clients.filter(c => c.status === 'Fechado' || c.status === 'Convertido').length;
 
     let tableRows = clients.map(c => {
-        const clsStatus = c.status.toLowerCase().replace(/\s+/g, '-').replace('ç','c').replace('ã','a');
+        const clsStatus = c.status.toLowerCase().replace(/\s+/g, '-').replace('ç', 'c').replace('ã', 'a');
         const sellerName = isAdmin ? `<br><small style="color:var(--text-muted)">Vendedor(a): ${users.find(u => String(u.id) === String(c.sellerId))?.name || 'Desconhecido'}</small>` : '';
         return `
         <tr style="cursor: pointer;" onclick="if(event.target.tagName !== 'BUTTON') viewClientDetails('${c.id}')">
@@ -290,13 +289,13 @@ const ViewDashboard = async () => {
             <td>${c.discountPercent}%</td>
             <td>${c.savings > 0 ? formatCurrency(c.savings) + '/mês' : '-'}</td>
             <td>
-                ${(c.status !== 'Perdida' && c.status !== 'Desativado') ? 
-                  `<button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; margin-right: 0.5rem;" onclick="deactivateClient('${c.id}')">Perdida</button>` : 
-                  `<button class="btn btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; margin-right: 0.5rem;" onclick="reactivateClient('${c.id}')">Reativar</button>`
-                }
-                ${(c.status === 'Perdida' || c.status === 'Desativado') ? 
-                  `<button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.3);" onclick="deleteClient('${c.id}')">Excluir</button>` : ''
-                }
+                ${(c.status !== 'Perdida' && c.status !== 'Desativado') ?
+                `<button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; margin-right: 0.5rem;" onclick="deactivateClient('${c.id}')">Perdida</button>` :
+                `<button class="btn btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; margin-right: 0.5rem;" onclick="reactivateClient('${c.id}')">Reativar</button>`
+            }
+                ${(c.status === 'Perdida' || c.status === 'Desativado') ?
+                `<button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.3);" onclick="deleteClient('${c.id}')">Excluir</button>` : ''
+            }
             </td>
         </tr>`;
     }).join('');
@@ -460,29 +459,29 @@ const ViewCommissions = async () => {
     const users = isAdmin ? await db.getUsers() : [];
 
     const clients = (isAdmin ? allClients : allClients.filter(c => c.sellerId === currentUser.id))
-                    .filter(c => c.status === 'Fechado' || c.status === 'Convertido');
+        .filter(c => c.status === 'Fechado' || c.status === 'Convertido');
     const totalClients = clients.length;
-    
+
     let totalKwh = 0;
     let totalFirstInvoice = 0;
     let totalMonthly = 0;
-    
+
     let tableRows = clients.map(c => {
         const bill = parseFloat(c.billValue) || 0;
         const kwh = parseFloat(c.kwh) || 0;
         totalKwh += kwh;
-        
+
         let firstPercent = 0.30;
-        if(bill > 6000) firstPercent = 0.60;
-        else if(bill > 3000) firstPercent = 0.50;
-        else if(bill > 1000) firstPercent = 0.40;
-        
+        if (bill > 6000) firstPercent = 0.60;
+        else if (bill > 3000) firstPercent = 0.50;
+        else if (bill > 1000) firstPercent = 0.40;
+
         const firstInvComm = bill * firstPercent;
         totalFirstInvoice += firstInvComm;
-        
+
         const monthlyComm = bill * 0.05;
         totalMonthly += monthlyComm;
-        
+
         const sellerName = isAdmin ? `<br><small style="color:var(--text-muted)">Venda de: ${users.find(u => String(u.id) === String(c.sellerId))?.name || 'Desconhecido'}</small>` : '';
 
         return `
@@ -495,17 +494,17 @@ const ViewCommissions = async () => {
         `;
     }).join('');
 
-    if(clients.length === 0) {
+    if (clients.length === 0) {
         tableRows = '<tr><td colspan="4" style="text-align:center; padding: 2rem;">Nenhuma comissão registrada ainda. Feche contratos para visualizar.</td></tr>';
     }
 
     const baseCommission = totalFirstInvoice + totalMonthly;
-    
+
     let bonusPercent = 0;
-    if(totalKwh > 60000) bonusPercent = 0.30;
-    else if(totalKwh > 30000) bonusPercent = 0.20;
-    else if(totalKwh > 10000) bonusPercent = 0.10;
-    
+    if (totalKwh > 60000) bonusPercent = 0.30;
+    else if (totalKwh > 30000) bonusPercent = 0.20;
+    else if (totalKwh > 10000) bonusPercent = 0.10;
+
     const bonusValue = baseCommission * bonusPercent;
     const finalCommission = baseCommission + bonusValue;
 
@@ -593,9 +592,9 @@ const ViewSimulation = (client = null) => {
                     <div class="input-group" style="flex: 1;">
                         <label>Classe de fornecimento</label>
                         <select id="sim-supply-class" required style="background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); padding: 0.8rem 1rem; border-radius: 8px; color: var(--text-main); font-size: 1rem; outline: none; width: 100%;">
-                            <option value="Monofásico" ${cSupply === 'Monofásico'?'selected':''}>Monofásico</option>
-                            <option value="Bifásico" ${cSupply === 'Bifásico'?'selected':''}>Bifásico</option>
-                            <option value="Trifásico" ${cSupply === 'Trifásico'?'selected':''}>Trifásico</option>
+                            <option value="Monofásico" ${cSupply === 'Monofásico' ? 'selected' : ''}>Monofásico</option>
+                            <option value="Bifásico" ${cSupply === 'Bifásico' ? 'selected' : ''}>Bifásico</option>
+                            <option value="Trifásico" ${cSupply === 'Trifásico' ? 'selected' : ''}>Trifásico</option>
                         </select>
                     </div>
                 </div>
@@ -618,8 +617,8 @@ const ViewSimulation = (client = null) => {
                 <div class="input-group">
                     <label>Classe do representante</label>
                     <select id="sim-rep-class" onchange="document.getElementById('pj-only-fields').style.display = this.value === 'Pessoa Jurídica' ? 'block' : 'none'" required style="background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); padding: 0.8rem 1rem; border-radius: 8px; color: var(--text-main); font-size: 1rem; outline: none; width: 100%;">
-                        <option value="Pessoa Física" ${cRep === 'Pessoa Física'?'selected':''}>Pessoa Física</option>
-                        <option value="Pessoa Jurídica" ${cRep === 'Pessoa Jurídica'?'selected':''}>Pessoa Jurídica</option>
+                        <option value="Pessoa Física" ${cRep === 'Pessoa Física' ? 'selected' : ''}>Pessoa Física</option>
+                        <option value="Pessoa Jurídica" ${cRep === 'Pessoa Jurídica' ? 'selected' : ''}>Pessoa Jurídica</option>
                     </select>
                 </div>
                 
@@ -722,36 +721,36 @@ window.handleQuickSim = (e) => {
     const supplyClass = document.getElementById('qsim-supply').value;
     const kwhPrice = parseFloat(document.getElementById('qsim-price').value);
     const publicLight = parseFloat(document.getElementById('qsim-light').value);
-    
+
     const value = (kwh * kwhPrice) + publicLight;
-    
+
     let taxaDisp = 30;
-    if(supplyClass === 'Bifásico') taxaDisp = 50;
-    if(supplyClass === 'Trifásico') taxaDisp = 100;
+    if (supplyClass === 'Bifásico') taxaDisp = 50;
+    if (supplyClass === 'Trifásico') taxaDisp = 100;
 
     let energiaCompensavel = Math.max(0, kwh - taxaDisp);
-    
+
     let eligible = false;
     let discount = 0;
-    
-    if(kwh <= 250) {
+
+    if (kwh <= 250) {
         eligible = false;
-    } else if(kwh <= 500) { 
-        eligible = true; 
-        discount = 20; 
-    } else { 
-        eligible = true; 
-        discount = 25; 
+    } else if (kwh <= 500) {
+        eligible = true;
+        discount = 20;
+    } else {
+        eligible = true;
+        discount = 25;
     }
-    
+
     const coopBill = energiaCompensavel * (1 - (discount / 100)) * kwhPrice;
     const utilityBill = (taxaDisp * kwhPrice) + publicLight;
     const newBill = Math.max(0, coopBill + utilityBill);
     const savings = Math.max(0, value - newBill);
-    
+
     const resultBox = document.getElementById('quick-result-box');
-    
-    if(eligible) {
+
+    if (eligible) {
         resultBox.className = 'result-card show';
         resultBox.innerHTML = `
             <h3>✅ Viável para Desconto!</h3>
@@ -831,7 +830,7 @@ window.handleSimulation = (e, editId = null) => {
     const kwhPrice = parseFloat(document.getElementById('sim-kwh-price').value);
     const publicLight = parseFloat(document.getElementById('sim-public-light').value);
     const repClass = document.getElementById('sim-rep-class').value;
-    
+
     // Novos campos do Representante Legal
     const repName = document.getElementById('sim-rep-name').value;
     const repCpf = document.getElementById('sim-rep-cpf').value;
@@ -846,34 +845,34 @@ window.handleSimulation = (e, editId = null) => {
 
     const kwh = parseFloat(document.getElementById('sim-kwh').value);
     const value = (kwh * kwhPrice) + publicLight; // calculate total bill value dynamically
-    
+
     let taxaDisp = 30;
-    if(supplyClass === 'Bifásico') taxaDisp = 50;
-    if(supplyClass === 'Trifásico') taxaDisp = 100;
+    if (supplyClass === 'Bifásico') taxaDisp = 50;
+    if (supplyClass === 'Trifásico') taxaDisp = 100;
 
     let energiaCompensavel = Math.max(0, kwh - taxaDisp);
-    
+
     let eligible = false;
     let discount = 0;
-    
-    if(kwh <= 250) {
+
+    if (kwh <= 250) {
         eligible = false;
-    } else if(kwh <= 500) { 
-        eligible = true; 
-        discount = 20; 
-    } else { 
-        eligible = true; 
-        discount = 25; 
+    } else if (kwh <= 500) {
+        eligible = true;
+        discount = 20;
+    } else {
+        eligible = true;
+        discount = 25;
     }
-    
+
     const coopBill = energiaCompensavel * (1 - (discount / 100)) * kwhPrice;
     const utilityBill = (taxaDisp * kwhPrice) + publicLight;
     const newBill = Math.max(0, coopBill + utilityBill);
     const savings = Math.max(0, value - newBill);
-    
-    currentSimData = { 
+
+    currentSimData = {
         id: editId,
-        name, 
+        name,
         documentId,
         address,
         supplyClass,
@@ -890,16 +889,16 @@ window.handleSimulation = (e, editId = null) => {
         repAddress,
         billFile,
         billUrl: currentSimData ? currentSimData.billUrl : null,
-        billValue: value, 
-        discountPercent: discount, 
+        billValue: value,
+        discountPercent: discount,
         savings,
         energiaCompensavel,
         newBill
     };
-    
+
     const resultBox = document.getElementById('result-box');
-    
-    if(eligible) {
+
+    if (eligible) {
         resultBox.className = 'result-card show';
         resultBox.innerHTML = `
             <h3>✅ Cliente Elegível!</h3>
@@ -982,7 +981,7 @@ window.saveClient = async (status) => {
         energiaCompensavel: currentSimData.energiaCompensavel,
         newBill: currentSimData.newBill
     };
-    
+
     try {
         await db.saveClient(clientData);
         
@@ -1093,10 +1092,10 @@ const ViewClientDetailsOnly = (client) => {
 };
 
 window.deactivateClient = async (id) => {
-    if(confirm('Tem certeza que deseja marcar este cliente como Perdida?')) {
+    if (confirm('Tem certeza que deseja marcar este cliente como Perdida?')) {
         const allClients = await db.getClients();
         const client = allClients.find(c => String(c.id) === String(id));
-        if(client) {
+        if (client) {
             client.status = 'Perdida';
             await db.saveClient(client);
             navigate('dashboard');
@@ -1109,7 +1108,7 @@ window.deactivateClient = async (id) => {
 window.reactivateClient = async (id) => {
     const clients = await db.getClients();
     const idx = clients.findIndex(c => String(c.id) === String(id));
-    if(idx !== -1) {
+    if (idx !== -1) {
         navigate('simulation', clients[idx]);
     } else {
         alert('Erro: Cliente não encontrado (ID: ' + id + ')');
@@ -1117,8 +1116,8 @@ window.reactivateClient = async (id) => {
 };
 
 window.deleteClient = async (id) => {
-    if(confirm('Passo 1/2: Você está prestes a excluir este cliente permanentemente. Continuar?')) {
-        if(confirm('Passo 2/2: EXCLUSÃO PERMANENTE. Confirmar EXCLUSÃO?')) {
+    if (confirm('Passo 1/2: Você está prestes a excluir este cliente permanentemente. Continuar?')) {
+        if (confirm('Passo 2/2: EXCLUSÃO PERMANENTE. Confirmar EXCLUSÃO?')) {
             await db.deleteClient(id);
             navigate('dashboard');
         }
@@ -1141,38 +1140,38 @@ window.toggleUserStatus = async (id, newStatus) => {
 
 window.closeContract = async () => {
     if (!currentSimData) return;
-    
+
     const hoje = new Date();
     const dataFormatada = hoje.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
-    const pjText = currentSimData.repClass === "Pessoa Jurídica" 
+    const pjText = currentSimData.repClass === "Pessoa Jurídica"
         ? `QUALIFICAÇÃO – PESSOA JURÍDICA ${currentSimData.name}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${currentSimData.documentId}, com sede à ${currentSimData.address}, neste ato representada por seu(s) representante(s) legal(is), ${currentSimData.repName || '[NOME COMPLETO DO REPRESENTANTE]'}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, portador do RG nº ${currentSimData.repRg || '[RG]'} e inscrito no CPF nº ${currentSimData.repCpf || '[CPF]'}, residente e domiciliado à ${currentSimData.repAddress || '[endereço completo do representante]'}, doravante denominada simplesmente "COOPERADO".`
         : `${currentSimData.name}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, portador do RG nº ${currentSimData.repRg || '[RG]'} e inscrito no CPF nº ${currentSimData.documentId}, residente e domiciliado à ${currentSimData.repAddress || currentSimData.address}, doravante denominado simplesmente "COOPERADO".`;
 
     const docDefinition = {
         pageSize: 'A4',
-        pageMargins: [ 40, 60, 40, 60 ],
+        pageMargins: [40, 60, 40, 60],
         content: [
             { text: "CONTRATO DE CESSÃO DO BENEFÍCIO ECONÔMICO DE CRÉDITOS DE ENERGIA ELÉTRICA", style: 'header' },
             { text: "NO ÂMBITO DO SISTEMA DE COMPENSAÇÃO DE ENERGIA ELÉTRICA (SCEE)", style: 'subheader' },
-            
+
             { text: "Pelo presente instrumento particular, as partes abaixo qualificadas:", margin: [0, 10, 0, 10] },
-            
+
             { text: "I – COOPERATIVA (ADMINISTRADORA E GESTORA OPERACIONAL)", style: 'boldText' },
             { text: "COOPSOL – COOPERATIVA DE GERAÇÃO DISTRIBUÍDA DE ENERGIA, pessoa jurídica de direito privado, constituída sob a forma de cooperativa, inscrita no CNPJ nº 00.000.000/0001-00, com sede em Centro, São Paulo - SP, neste ato representada na forma de seu Estatuto Social, doravante denominada simplesmente \"COOPERATIVA\".", style: 'paragraph' },
-            
+
             { text: "II – COOPERADO (UNIDADE CONSUMIDORA BENEFICIÁRIA)", style: 'boldText' },
             { text: pjText, style: 'paragraph' },
-            
+
             { text: "CLÁUSULA PRIMEIRA – DO OBJETO", style: 'boldText' },
             { text: "1.1. O presente contrato tem por objeto a cessão, pela COOPERATIVA ao COOPERADO, do benefício econômico decorrente da compensação de créditos de energia elétrica, no âmbito do Sistema de Compensação de Energia Elétrica – SCEE.", style: 'paragraph' },
             { text: "1.2. Os créditos de energia elétrica são oriundos de ativos de geração distribuída vinculados à COOPERATIVA e/ou aos seus cooperados investidores, sendo sua gestão, alocação e compensação realizadas exclusivamente pela COOPERATIVA.", style: 'paragraph' },
             { text: "1.3. As partes reconhecem que o presente instrumento não configura compra e venda de energia elétrica, tratando-se exclusivamente de cessão de benefício econômico no âmbito de ato cooperativo.", style: 'paragraph' },
-            
+
             { text: "CLÁUSULA SEGUNDA – DA TITULARIDADE DOS ATIVOS", style: 'boldText' },
             { text: "2.1. Os ativos de geração e as cotas-partes vinculadas pertencem à COOPERATIVA e/ou aos seus cooperados investidores, não sendo objeto de transferência ao COOPERADO.", style: 'paragraph' },
             { text: "2.2. O COOPERADO fará jus exclusivamente ao benefício econômico da compensação de créditos, não adquirindo qualquer direito de propriedade, participação societária ou titularidade sobre os ativos.", style: 'paragraph' },
-            
+
             { text: "CLÁUSULA TERCEIRA – DO PRAZO DE VIGÊNCIA", style: 'boldText' },
             { text: "3.1. O presente contrato terá prazo de vigência de 12 (doze) meses, contados a partir da data de sua assinatura.", style: 'paragraph' },
             { text: "3.2. O contrato será renovado automaticamente por iguais períodos, salvo manifestação contrária com antecedência mínima de 120 (cento e vinte) dias.", style: 'paragraph' },
@@ -1231,7 +1230,7 @@ window.closeContract = async () => {
 
             // ANEXO I
             { text: "ANEXO I – FICHA DE MATRÍCULA DO COOPERADO", style: 'header', pageBreak: 'before', margin: [0, 20, 0, 20] },
-            
+
             { text: "1. IDENTIFICAÇÃO DA COOPERATIVA", style: 'boldText' },
             { text: "Razão Social: COOPSOL\nCNPJ: 00.000.000/0001-00", style: 'paragraph' },
 
@@ -1244,8 +1243,8 @@ window.closeContract = async () => {
                     headerRows: 1,
                     widths: ['auto', '*', 'auto', 'auto'],
                     body: [
-                        [ {text: 'UC', bold: true}, {text: 'Endereço', bold: true}, {text: '% Rateio', bold: true}, {text: 'Consumo', bold: true} ],
-                        [ 'Principal', currentSimData.address, '100%', `${currentSimData.kwh} kWh` ]
+                        [{ text: 'UC', bold: true }, { text: 'Endereço', bold: true }, { text: '% Rateio', bold: true }, { text: 'Consumo', bold: true }],
+                        ['Principal', currentSimData.address, '100%', `${currentSimData.kwh} kWh`]
                     ]
                 },
                 margin: [0, 0, 0, 15]
@@ -1272,38 +1271,38 @@ window.closeContract = async () => {
     };
 
     pdfMake.createPdf(docDefinition).download(`Contrato_CoopSol_${currentSimData.name.replace(/\s+/g, '')}.pdf`);
-    
+
     // Salva o cliente como Fechado após emitir
     await saveClient('Fechado');
     navigate('dashboard');
 };
 
 window.updateSimSavings = () => {
-    if(!currentSimData) return;
+    if (!currentSimData) return;
     const inputEl = document.getElementById('custom-discount');
     const newDiscount = parseFloat(inputEl.value) || 0;
-    
+
     let taxaDisp = 30;
-    if(currentSimData.supplyClass === 'Bifásico') taxaDisp = 50;
-    if(currentSimData.supplyClass === 'Trifásico') taxaDisp = 100;
-    
+    if (currentSimData.supplyClass === 'Bifásico') taxaDisp = 50;
+    if (currentSimData.supplyClass === 'Trifásico') taxaDisp = 100;
+
     const coopBill = currentSimData.energiaCompensavel * (1 - (newDiscount / 100)) * currentSimData.kwhPrice;
     const utilityBill = (taxaDisp * currentSimData.kwhPrice) + currentSimData.publicLight;
-    
+
     const newBill = Math.max(0, coopBill + utilityBill);
     const newSavings = Math.max(0, currentSimData.billValue - newBill);
-    
+
     currentSimData.discountPercent = newDiscount;
     currentSimData.savings = newSavings;
     currentSimData.newBill = newBill;
-    
+
     const savingsEl = document.getElementById('savings-display');
     const newBillEl = document.getElementById('new-bill-display');
-    
-    if(savingsEl) savingsEl.innerText = formatCurrency(newSavings) + '/mês';
-    if(newBillEl) newBillEl.innerText = formatCurrency(newBill);
+
+    if (savingsEl) savingsEl.innerText = formatCurrency(newSavings) + '/mês';
+    if (newBillEl) newBillEl.innerText = formatCurrency(newBill);
 };
 
 // Start App
-if(currentUser) navigate('dashboard');
+if (currentUser) navigate('dashboard');
 else navigate('login');
