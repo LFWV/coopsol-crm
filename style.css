@@ -154,6 +154,21 @@ body:not([data-theme="dark"]) .btn-outline {
     box-shadow: 0 0 0 3px rgba(0, 158, 47, 0.1) !important;
 }
 
+select option {
+    background-color: #0f172a !important;
+    color: #f8fafc !important;
+}
+
+body[data-theme="dark"] select {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+}
+
+body[data-theme="dark"] select option {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+}
+
 /* Layouts */
 .auth-layout {
     display: flex;
@@ -308,4 +323,46 @@ body:not([data-theme="dark"]) .btn-outline {
 @keyframes fadeInDown {
     from { opacity: 0; transform: translateY(-10px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+/* Modais */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.modal-content {
+    background: #0f172a;
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 2.5rem;
+    border-radius: 24px;
+    max-width: 480px;
+    width: 90%;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8);
+    text-align: center;
+}
+
+.modal-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 1rem;
+}
+
+.modal-text {
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-bottom: 2rem;
+}
+
+.modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
 }
