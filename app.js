@@ -193,7 +193,7 @@ async function navigate(route, data = null) {
     }
     else if(route === 'simulation') {
         if(!currentUser) return navigate('login');
-        app.innerHTML = ViewSimulation(data);
+        app.innerHTML = await ViewSimulation(data);
     }
     else if(route === 'quickSim') {
         if(!currentUser) return navigate('login');
@@ -210,7 +210,7 @@ async function navigate(route, data = null) {
     }
     else if(route === 'clientView') {
         if(!currentUser) return navigate('login');
-        app.innerHTML = ViewClientDetailsOnly(data);
+        app.innerHTML = await ViewClientDetailsOnly(data);
     }
     else if(route === 'analytics') {
         if(!currentUser) return navigate('login');
@@ -649,7 +649,11 @@ const ViewCommissions = async () => {
     </div>`;
 };
 
-const ViewSimulation = (client = null) => {
+const ViewSimulation = async (client = null) => {
+    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    let users = isAdmin ? await db.getUsers() : [];
+    users.sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+
     const cName = client && client.name ? client.name : '';
     const cDoc = client && client.documentId ? client.documentId : '';
     const cAddr = client && client.address ? client.address : '';
@@ -661,6 +665,7 @@ const ViewSimulation = (client = null) => {
     const cUc = client && client.ucNumber ? client.ucNumber : '';
     const cContract = client && client.contractStatus ? client.contractStatus : 'Em preparação';
     const cTemp = client && client.temperature ? client.temperature : 'Morna';
+    const cSellerId = client && client.sellerId ? String(client.sellerId) : String(currentUser.id);
 
     return `
 <div class="app-layout">
@@ -679,6 +684,19 @@ const ViewSimulation = (client = null) => {
                     </select>
                 </div>
             </div>
+
+            ${isAdmin ? `
+            <!-- Painel Admin - Cadastro -->
+            <div style="background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; display: flex; flex-direction: column; align-items: center; text-align: center;">
+                <strong style="color: #a78bfa; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">⚙️ Gestão Administrativa</strong>
+                <div style="width: 100%; max-width: 400px;">
+                    <label style="display: block; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.5rem;">Vendedor Responsável</label>
+                    <select id="sim-seller-id" style="width: 100%; padding: 0.8rem; border-radius: 8px; background: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none; font-size: 1rem;">
+                        ${users.map(u => `<option value="${u.id}" ${cSellerId === String(u.id) ? 'selected' : ''} style="background: var(--bg-dark);">${u.name}${u.email ? ' ('+u.email+')' : ''}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+            ` : ''}
             <form id="sim-form" onsubmit="handleSimulation(event, ${client ? client.id : 'null'})">
                 <div style="display: flex; gap: 1rem; width: 100%;">
                     <div class="input-group" style="flex: 2;">
@@ -947,6 +965,7 @@ window.handleSimulation = async (e, editId = null) => {
     const ucNumber = document.getElementById('sim-uc').value;
     const contractStatus = document.getElementById('sim-contract-status').value;
     const temperature = document.getElementById('sim-temperature').value;
+    const sellerId = document.getElementById('sim-seller-id') ? document.getElementById('sim-seller-id').value : (currentSimData ? currentSimData.sellerId : currentUser.id);
     
     const billFileInput = document.getElementById('sim-bill-file');
     const billFile = billFileInput.files.length > 0 ? billFileInput.files[0] : null;
@@ -987,6 +1006,7 @@ window.handleSimulation = async (e, editId = null) => {
         ucNumber,
         contractStatus,
         temperature,
+        sellerId,
         billFile,
         billUrl: currentSimData ? currentSimData.billUrl : null,
         billValue: value, 
@@ -1057,7 +1077,7 @@ window.saveClient = async (status) => {
 
     const clientData = {
         id: clientId,
-        sellerId: currentUser.id,
+        sellerId: currentSimData.sellerId || currentUser.id,
         name: currentSimData.name,
         documentId: currentSimData.documentId,
         address: currentSimData.address,
@@ -1107,7 +1127,12 @@ window.viewClientDetails = async (id) => {
     }
 };
 
-const ViewClientDetailsOnly = (client) => {
+const ViewClientDetailsOnly = async (client) => {
+    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    let users = isAdmin ? await db.getUsers() : [];
+    users.sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+    const currentSeller = users.find(u => String(u.id) === String(client.sellerId));
+    
     const billUrlLink = client.billUrl ? `<a href="${client.billUrl}" target="_blank" class="btn btn-outline" style="margin-top:1rem; display:inline-block; border-color: var(--accent-primary); color: var(--accent-primary);">👁️ Ver Conta de Luz</a>` : '';
 
     return `
@@ -1119,6 +1144,24 @@ const ViewClientDetailsOnly = (client) => {
                 <h2 style="margin: 0; font-size: 1.5rem; color: var(--text-main);">Ficha do Cliente</h2>
                 <button class="btn btn-outline" onclick="navigate('dashboard')">⬅ Voltar</button>
             </div>
+
+            ${isAdmin ? `
+            <!-- Painel Admin - Visualização -->
+            <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+                    <strong style="color: #a78bfa; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; display: block;">🛠️ Painel de Gestão (Admin)</strong>
+                    <div style="display: flex; gap: 1rem; width: 100%; max-width: 500px; justify-content: center; align-items: flex-end;">
+                        <div style="flex: 1; text-align: left;">
+                            <label style="display: block; color: var(--text-muted); font-size: 0.75rem; margin-bottom: 0.4rem;">Reatribuir Vendedor Responsável</label>
+                            <select id="update-seller-id" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; padding: 0.7rem; border-radius: 8px; outline:none; font-size: 0.95rem;">
+                                ${users.map(u => `<option value="${u.id}" ${String(u.id) === String(client.sellerId) ? 'selected' : ''}>${u.name}${u.email ? ' ('+u.email+')' : ''}</option>`).join('')}
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" style="height: 42px; padding: 0 1.5rem;" onclick="updateClientSeller('${client.id}')">Atualizar</button>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
                 <div>
@@ -1468,6 +1511,16 @@ window.updateClientTemperature = async (id, temp) => {
     } catch(e) { alert('Erro ao atualizar temperatura'); }
 };
 
+window.updateClientSeller = async (id) => {
+    const newSellerId = document.getElementById('update-seller-id').value;
+    if(!newSellerId) return alert('Selecione um vendedor.');
+    try {
+        await db.saveClient({ id, sellerId: newSellerId });
+        alert('Vendedor responsável atualizado!');
+        navigate('clients');
+    } catch(e) { alert('Erro ao atualizar vendedor'); }
+};
+
 window.saveClientMetadataOnly = async (id) => {
     const data = {
         id,
@@ -1565,7 +1618,7 @@ const ViewAnalytics = async () => {
     const ticketMedio = closedClients.length > 0 ? (totalKwhClosed / closedClients.length) : 0;
     const conversionRate = clients.length > 0 ? (closedClients.length / clients.length) * 100 : 0;
     
-    const factor = 1.12;
+    const factor = await db.getGlobalKwhPrice();
     const valClosed = totalKwhClosed * factor;
     const valNeg = totalKwhNeg * factor;
     const valLost = totalKwhLost * factor;
