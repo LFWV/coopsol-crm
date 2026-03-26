@@ -3,15 +3,15 @@ window.closeContract = async () => {
     
     const hoje = new Date();
     const meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-    const dataFormatada = \`\${hoje.getDate()} de \${meses[hoje.getMonth()]} de \${hoje.getFullYear()}\`;
+    const dataFormatada = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
 
     const pjText = currentSimData.repClass === "Pessoa Jurídica" 
-        ? \`\${currentSimData.name}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº \${currentSimData.documentId}, com sede na \${currentSimData.address}, neste ato representada por seu(s) representante(s) legal(is), \${currentSimData.repName || ''}, \${currentSimData.repNacionality || ''}, \${currentSimData.repCivil || ''}, \${currentSimData.repJob || ''}, portador do RG nº \${currentSimData.repRg || ''} e inscrito no CPF nº \${currentSimData.repCpf || ''}, residente e domiciliado à \${currentSimData.repAddress || ''}, doravante denominado simplesmente "COOPERADO".\`
-        : \`\${currentSimData.name}, \${currentSimData.repNacionality || ''}, \${currentSimData.repCivil || ''}, \${currentSimData.repJob || ''}, portador do RG nº \${currentSimData.repRg || ''} e inscrito no CPF nº \${currentSimData.documentId}, residente e domiciliado na \${currentSimData.address}, doravante denominado simplesmente "COOPERADO".\`;
+        ? `${currentSimData.name}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${currentSimData.documentId}, com sede na ${currentSimData.address}, neste ato representada por seu(s) representante(s) legal(is), ${currentSimData.repName || '[NOME COMPLETO DO REPRESENTANTE]'}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, inscrito no CPF nº ${currentSimData.repCpf || '[CPF]'}, residente e domiciliado à ${currentSimData.repAddress || '[endereço completo do representante]'}, doravante denominado simplesmente "COOPERADO".`
+        : `${currentSimData.name}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, inscrito no CPF nº ${currentSimData.documentId}, residente e domiciliado na ${currentSimData.address}, doravante denominado simplesmente "COOPERADO".`;
 
     const docDefinition = {
         pageSize: 'A4',
-        pageMargins: [ 50, 60, 50, 60 ],
+        pageMargins: [ 50, 100, 50, 60 ],
         content: [
             { text: "CONTRATO DE CESSÃO DO BENEFÍCIO ECONÔMICO DE CRÉDITOS DE ENERGIA ELÉTRICA", style: 'header' },
             { text: "NO ÂMBITO DO SISTEMA DE COMPENSAÇÃO DE ENERGIA ELÉTRICA (SCEE)", style: 'subheader' },

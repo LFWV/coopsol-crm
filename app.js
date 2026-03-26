@@ -747,10 +747,6 @@ const ViewSimulation = (client = null) => {
                     
                     <div style="display: flex; gap: 1rem; width: 100%;">
                         <div class="input-group" style="flex: 1;">
-                            <label>RG</label>
-                            <input type="text" id="sim-rep-rg" value="${client && client.repRg ? client.repRg : ''}" placeholder="Apenas números">
-                        </div>
-                        <div class="input-group" style="flex: 1;">
                             <label>Nacionalidade</label>
                             <input type="text" id="sim-rep-nacionality" value="${client && client.repNacionality ? client.repNacionality : ''}" placeholder="Ex: Brasileiro(a)">
                         </div>
@@ -944,7 +940,6 @@ window.handleSimulation = async (e, editId = null) => {
     // Novos campos do Representante Legal
     const repName = document.getElementById('sim-rep-name').value;
     const repCpf = document.getElementById('sim-rep-cpf').value;
-    const repRg = document.getElementById('sim-rep-rg').value;
     const repNacionality = document.getElementById('sim-rep-nacionality').value;
     const repCivil = document.getElementById('sim-rep-civil').value;
     const repJob = document.getElementById('sim-rep-job').value;
@@ -985,7 +980,6 @@ window.handleSimulation = async (e, editId = null) => {
         repClass,
         repName,
         repCpf,
-        repRg,
         repNacionality,
         repCivil,
         repJob,
@@ -1074,7 +1068,6 @@ window.saveClient = async (status) => {
         repClass: currentSimData.repClass,
         repName: currentSimData.repName,
         repCpf: currentSimData.repCpf,
-        repRg: currentSimData.repRg,
         repNacionality: currentSimData.repNacionality,
         repCivil: currentSimData.repCivil,
         repJob: currentSimData.repJob,
@@ -1274,12 +1267,12 @@ window.closeContract = async () => {
 
     // Lógica para o texto do Cooperado (PF ou PJ)
     const pjText = currentSimData.repClass === "Pessoa Jurídica" 
-        ? `QUALIFICAÇÃO – PESSOA JURÍDICA ${currentSimData.name}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${currentSimData.documentId}, com sede à ${currentSimData.address}, neste ato representada por seu(s) representante(s) legal(is), ${currentSimData.repName || '[NOME COMPLETO DO REPRESENTANTE]'}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, portador do RG nº ${currentSimData.repRg || '[RG]'} e inscrito no CPF nº ${currentSimData.repCpf || '[CPF]'}, residente e domiciliado à ${currentSimData.repAddress || '[endereço completo do representante]'}, doravante denominada simplesmente "COOPERADO".`
-        : `${currentSimData.name}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, portador do RG nº ${currentSimData.repRg || '[RG]'} e inscrito no CPF nº ${currentSimData.documentId}, residente e domiciliado à ${currentSimData.repAddress || currentSimData.address}, doravante denominado simplesmente "COOPERADO".`;
+        ? `QUALIFICAÇÃO – PESSOA JURÍDICA ${currentSimData.name}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${currentSimData.documentId}, com sede à ${currentSimData.address}, neste ato representada por seu(s) representante(s) legal(is), ${currentSimData.repName || '[NOME COMPLETO DO REPRESENTANTE]'}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, inscrito no CPF nº ${currentSimData.repCpf || '[CPF]'}, residente e domiciliado à ${currentSimData.repAddress || '[endereço completo do representante]'}, doravante denominada simplesmente "COOPERADO".`
+        : `${currentSimData.name}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, inscrito no CPF nº ${currentSimData.documentId}, residente e domiciliado à ${currentSimData.repAddress || currentSimData.address}, doravante denominado simplesmente "COOPERADO".`;
 
     const docDefinition = {
         pageSize: 'A4',
-        pageMargins: [ 40, 40, 40, 40 ],
+        pageMargins: [ 40, 100, 40, 40 ],
         header: function(currentPage, pageCount, pageSize) {
             return {
                 image: logoBase64,
@@ -1289,7 +1282,7 @@ window.closeContract = async () => {
             };
         },
         content: [
-            { text: "CONTRATO DE CESSÃO DO BENEFÍCIO ECONÔMICO DE CRÉDITOS DE ENERGIA ELÉTRICA", style: 'header', margin: [0, 40, 0, 5] },
+            { text: "CONTRATO DE CESSÃO DO BENEFÍCIO ECONÔMICO DE CRÉDITOS DE ENERGIA ELÉTRICA", style: 'header', margin: [0, 10, 0, 5] },
             { text: "NO ÂMBITO DO SISTEMA DE COMPENSAÇÃO DE ENERGIA ELÉTRICA (SCEE)", style: 'subheader', margin: [0, 0, 0, 20] },
             
             { text: "Pelo presente instrumento particular, as partes abaixo qualificadas:", margin: [0, 10, 0, 10] },
@@ -1345,10 +1338,10 @@ window.closeContract = async () => {
             { text: "11.3. Poderá ser atualizada sem aditivo, desde que não altere condições essenciais.", style: 'paragraph' },
 
             { text: "CLÁUSULA DÉCIMA SEGUNDA – DO FORO", style: 'boldText' },
-            { text: "Fica eleito o foro da Comarca de Abaeté/MG.", style: 'paragraph' },
+            { text: "Fica eleito o foro da Comarca de Belo Horizonte/MG.", style: 'paragraph' },
 
             { text: "ASSINATURAS", style: 'boldText', alignment: 'center', margin: [0, 30, 0, 10] },
-            { text: `Abaeté, ${dataFormatada}`, alignment: 'center', margin: [0, 0, 0, 30] },
+            { text: `Belo Horizonte, ${dataFormatada}`, alignment: 'center', margin: [0, 0, 0, 30] },
 
             { text: "_______________________________________________________", alignment: 'center' },
             { text: "COOPERATIVA – COOPSOL", alignment: 'center' },
