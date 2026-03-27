@@ -40,7 +40,7 @@ window.closeContract = async () => {
             { text: "3.2. O contrato será renovado automaticamente por iguais períodos, salvo manifestação contrária com antecedência mínima de 120 (cento e vinte) dias.", style: 'paragraph' },
 
             { text: "CLÁUSULA QUARTA – DO BENEFÍCIO ECONÔMICO", style: 'boldText' },
-            { text: \`4.1. O COOPERADO fará jus a um desconto de até \${currentSimData.discountPercent}% (trinta e cinco por cento) sobre a tarifa de energia elétrica da distribuidora, incidente sobre a parcela compensável.\`, style: 'paragraph' },
+            { text: `4.1. O COOPERADO fará jus a um desconto de até ${currentSimData.discountPercent}% (trinta e cinco por cento) sobre a tarifa de energia elétrica da distribuidora, incidente sobre a parcela compensável.`, style: 'paragraph' },
             { text: "4.2. O desconto não constitui garantia mínima, estando condicionado à geração efetiva, regras regulatórias, perfil de consumo e fatores tarifários.", style: 'paragraph' },
 
             { text: "CLÁUSULA QUINTA – DO PREÇO E FORMA DE PAGAMENTO", style: 'boldText' },
@@ -74,7 +74,7 @@ window.closeContract = async () => {
             { text: "Fica eleito o foro da Comarca de Belo Horizonte/MG.", style: 'paragraph' },
 
             { text: "ASSINATURAS", style: 'boldText', alignment: 'center', margin: [0, 30, 0, 10] },
-            { text: \`Belo Horizonte, \${dataFormatada}.\`, alignment: 'center', margin: [0, 0, 0, 40] },
+            { text: `Belo Horizonte, ${dataFormatada}.`, alignment: 'center', margin: [0, 0, 0, 40] },
 
             { text: "_______________________________________________________", alignment: 'center' },
             { text: "COOPERATIVA – COOPSOL", alignment: 'center' },
@@ -84,7 +84,7 @@ window.closeContract = async () => {
             { text: "_______________________________________________________", alignment: 'center' },
             { text: "COOPERADO", alignment: 'center' },
             { text: currentSimData.name, alignment: 'center' },
-            { text: \`\${currentSimData.repClass === 'Pessoa Jurídica' ? 'CNPJ' : 'CPF'}: \${currentSimData.documentId}\`, alignment: 'center' },
+            { text: `${currentSimData.repClass === 'Pessoa Jurídica' ? 'CNPJ' : 'CPF'}: ${currentSimData.documentId}`, alignment: 'center' },
             { text: "Assinatura: ______________________", alignment: 'center', margin: [0, 0, 0, 40] },
 
             { text: "TESTEMUNHAS", style: 'boldText', alignment: 'center', margin: [0, 0, 0, 20] },
@@ -98,7 +98,7 @@ window.closeContract = async () => {
             { text: "Razão Social: COOPSOL\\nCNPJ: 33.923.055/0001-22", style: 'paragraph' },
 
             { text: "2. IDENTIFICAÇÃO DO COOPERADO", style: 'boldText' },
-            { text: \`Razão Social / Nome: \${currentSimData.name}\\n\${currentSimData.repClass === 'Pessoa Jurídica' ? 'CNPJ' : 'CPF'}: \${currentSimData.documentId}\`, style: 'paragraph' },
+            { text: `Razão Social / Nome: ${currentSimData.name}\n${currentSimData.repClass === 'Pessoa Jurídica' ? 'CNPJ' : 'CPF'}: ${currentSimData.documentId}`, style: 'paragraph' },
 
             { text: "3. UNIDADES CONSUMIDORAS", style: 'boldText' },
             {
@@ -107,14 +107,14 @@ window.closeContract = async () => {
                     widths: ['auto', '*', 'auto', 'auto'],
                     body: [
                         [ {text: 'UC', bold: true}, {text: 'Endereço', bold: true}, {text: '% Rateio', bold: true}, {text: 'Consumo', bold: true} ],
-                        [ 'Principal', currentSimData.address, '100%', \`\${currentSimData.kwh} kWh\` ]
+                        [ 'Principal', currentSimData.address, '100%', `${currentSimData.kwh} kWh` ]
                     ]
                 },
                 margin: [0, 0, 0, 15]
             },
 
             { text: "4. CONDIÇÕES COMERCIAIS", style: 'boldText' },
-            { text: \`Desconto: \${currentSimData.discountPercent} %\\nForma de pagamento: Boleto / PIX\\nResponsável pela cobrança: COOPERATIVA\\nPeriodicidade: Mensal\`, style: 'paragraph' },
+            { text: `Desconto: ${currentSimData.discountPercent} %\nForma de pagamento: Boleto / PIX\nResponsável pela cobrança: COOPERATIVA\nPeriodicidade: Mensal`, style: 'paragraph' },
 
             { text: "5. PRAZO", style: 'boldText' },
             { text: "12 meses com renovação automática", style: 'paragraph' },
@@ -133,9 +133,89 @@ window.closeContract = async () => {
         }
     };
 
-    pdfMake.createPdf(docDefinition).download(\`Contrato_CoopSol_\${currentSimData.name.replace(/\\s+/g, '')}.pdf\`);
+    // Gera o PDF
+    const pdfDoc = pdfMake.createPdf(docDefinition);
+    
+    // Download local (opcional, mantido para segurança do vendedor)
+    pdfDoc.download(`Contrato_CoopSol_${currentSimData.name.replace(/\s+/g, '')}.pdf`);
+    
+    // Fluxo Autentique
+    document.body.insertAdjacentHTML('beforeend', '<div id="autentique-loader" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.8);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:white;font-size:1.2rem;font-weight:bold;"><span>🚀 Enviando para Autentique...</span><small style="margin-top:10px;font-weight:normal;">Assinantes: Cliente e Coopsol</small></div>');
+
+    try {
+        const pdfBlob = await new Promise(resolve => pdfDoc.getBlob(resolve));
+        const filename = `Contrato_CoopSol_${currentSimData.name.replace(/\s+/g, '')}.pdf`;
+        
+        const success = await sendToAutentique(pdfBlob, filename, currentSimData.email);
+        
+        if (success) {
+            alert('Contrato enviado com sucesso para assinatura no Autentique!');
+        } else {
+            alert('O contrato foi baixado, mas houve um erro ao enviar para o Autentique. Por favor, envie manualmente.');
+        }
+    } catch (e) {
+        console.error("Erro Autentique:", e);
+        alert('Erro ao processar envio para Autentique: ' + e.message);
+    } finally {
+        const loader = document.getElementById('autentique-loader');
+        if(loader) loader.remove();
+    }
     
     // Salva o cliente como Fechado após emitir
     await saveClient('Fechado');
     navigate('dashboard');
 };
+
+async function sendToAutentique(pdfBlob, filename, clientEmail) {
+    const AUTENTIQUE_TOKEN = '3453d57e0272da53b4d0efd06505bb33cbf18f54784dcb7acc0f5e8177254a1f';
+    const GRAPHQL_URL = 'https://api.autentique.com.br/v2/graphql';
+
+    const operations = JSON.stringify({
+        query: `
+            mutation CreateDocumentMutation($document: DocumentInput!, $signers: [SignerInput!]!, $file: Upload!) {
+                createDocument(document: $document, signers: $signers, file: $file) {
+                    id
+                    name
+                }
+            }
+        `,
+        variables: {
+            document: { name: filename },
+            signers: [
+                { email: clientEmail, action: 'SIGN' },
+                { email: 'vinicius.pereira@callieres.com', action: 'SIGN' }
+            ],
+            file: null
+        }
+    });
+
+    const map = JSON.stringify({ "0": ["variables.file"] });
+
+    const formData = new FormData();
+    formData.append('operations', operations);
+    formData.append('map', map);
+    formData.append('0', pdfBlob, filename);
+
+    try {
+        const response = await fetch(GRAPHQL_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${AUTENTIQUE_TOKEN}`
+            },
+            body: formData
+        });
+
+        const result = await response.json();
+        
+        if (result.errors) {
+            console.error("GraphQL Errors:", result.errors);
+            return false;
+        }
+
+        console.log("Autentique Success:", result.data.createDocument);
+        return true;
+    } catch (error) {
+        console.error("Fetch Error:", error);
+        return false;
+    }
+}

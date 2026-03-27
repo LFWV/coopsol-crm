@@ -666,6 +666,7 @@ const ViewSimulation = async (client = null) => {
     const cContract = client && client.contractStatus ? client.contractStatus : 'Em preparação';
     const cTemp = client && client.temperature ? client.temperature : 'Morna';
     const cSellerId = client && client.sellerId ? String(client.sellerId) : String(currentUser.id);
+    const cEmail = client && client.email ? client.email : '';
 
     return `
 <div class="app-layout">
@@ -707,6 +708,10 @@ const ViewSimulation = async (client = null) => {
                         <label>CPF / CNPJ</label>
                         <input type="text" id="sim-document" value="${cDoc}" required placeholder="Apenas números">
                     </div>
+                </div>
+                <div class="input-group">
+                    <label>E-mail do Cliente (Para assinatura digital)</label>
+                    <input type="email" id="sim-email" value="${cEmail}" required placeholder="cliente@email.com">
                 </div>
                 <div class="input-group">
                     <label>Endereço</label>
@@ -949,6 +954,7 @@ window.handleSimulation = async (e, editId = null) => {
     e.preventDefault();
     const name = document.getElementById('sim-name').value;
     const documentId = document.getElementById('sim-document').value;
+    const email = document.getElementById('sim-email').value;
     const address = document.getElementById('sim-address').value;
     const supplyClass = document.getElementById('sim-supply-class').value;
     const kwhPrice = await db.getGlobalKwhPrice();
@@ -991,6 +997,7 @@ window.handleSimulation = async (e, editId = null) => {
         id: editId,
         name, 
         documentId,
+        email,
         address,
         supplyClass,
         kwh,
@@ -1080,6 +1087,7 @@ window.saveClient = async (status) => {
         sellerId: currentSimData.sellerId || currentUser.id,
         name: currentSimData.name,
         documentId: currentSimData.documentId,
+        email: currentSimData.email,
         address: currentSimData.address,
         supplyClass: currentSimData.supplyClass,
         kwh: currentSimData.kwh,
@@ -1171,6 +1179,10 @@ const ViewClientDetailsOnly = async (client) => {
                 <div>
                     <strong style="color: var(--text-muted); font-size: 0.85rem;">Documento (CPF/CNPJ)</strong>
                     <div style="font-size: 1.1rem; font-weight: 500;">${client.documentId}</div>
+                </div>
+                <div>
+                    <strong style="color: var(--text-muted); font-size: 0.85rem;">E-mail do Cliente</strong>
+                    <div style="font-size: 1.1rem; font-weight: 500;">${client.email || 'Não informado'}</div>
                 </div>
                 <div style="grid-column: 1 / -1;">
                     <strong style="color: var(--text-muted); font-size: 0.85rem;">Endereço da Unidade</strong>
@@ -1526,6 +1538,7 @@ window.saveClientMetadataOnly = async (id) => {
         id,
         name: document.getElementById('sim-name').value,
         documentId: document.getElementById('sim-document').value,
+        email: document.getElementById('sim-email').value,
         address: document.getElementById('sim-address').value,
         ucNumber: document.getElementById('sim-uc').value,
         contractStatus: document.getElementById('sim-contract-status').value,
