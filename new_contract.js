@@ -1,4 +1,5 @@
 window.closeContract = async () => {
+    const currentSimData = window.currentSimData;
     if (!currentSimData) return;
     
     const hoje = new Date();
@@ -137,15 +138,25 @@ window.closeContract = async () => {
     const pdfDoc = pdfMake.createPdf(docDefinition);
     
     // Download local (opcional, mantido para segurança do vendedor)
-    pdfDoc.download(`Contrato_CoopSol_${currentSimData.name.replace(/\s+/g, '')}.pdf`);
+    pdfDoc.download(`Contrato_CoopSol_${window.currentSimData.name.replace(/\s+/g, '')}.pdf`);
     
     // Fluxo Autentique
     document.body.insertAdjacentHTML('beforeend', '<div id="autentique-loader" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.8);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:white;font-size:1.2rem;font-weight:bold;"><span>🚀 Enviando para Autentique...</span><small style="margin-top:10px;font-weight:normal;">Assinantes: Cliente e Coopsol</small></div>');
 
     try {
-        const pdfBlob = await new Promise(resolve => pdfDoc.getBlob(resolve));
+        const pdfBlob = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error("Timeout ao gerar PDF")), 15000);
+            pdfDoc.getBlob((blob) => {
+                clearTimeout(timeout);
+                resolve(blob);
+            });
+        });
+
+        if (!pdfBlob || pdfBlob.size < 100) {
+            throw new Error("PDF gerado está vazio ou inválido.");
+        }
+
         const filename = `Contrato_CoopSol_${currentSimData.name.replace(/\s+/g, '')}.pdf`;
-        
         const success = await sendToAutentique(pdfBlob, filename, currentSimData.email);
         
         if (success) {
@@ -169,6 +180,12 @@ window.closeContract = async () => {
 async function sendToAutentique(pdfBlob, filename, clientEmail) {
     const AUTENTIQUE_TOKEN = '3453d57e0272da53b4d0efd06505bb33cbf18f54784dcb7acc0f5e8177254a1f';
     const GRAPHQL_URL = 'https://api.autentique.com.br/v2/graphql';
+
+    console.log("Iniciando envio para Autentique...", { filename, clientEmail });
+    if (!clientEmail || !clientEmail.includes('@')) {
+        alert("Erro: E-mail do cliente inválido ou ausente. Por favor, preencha o e-mail no formulário de simulação.");
+        return false;
+    }
 
     const operations = JSON.stringify({
         query: `
@@ -206,18 +223,24 @@ async function sendToAutentique(pdfBlob, filename, clientEmail) {
         });
 
         const result = await response.json();
+        console.log("Resultado Autentique:", result);
         
         if (result.errors) {
             console.error("Autentique GraphQL Errors:", JSON.stringify(result.errors, null, 2));
-            alert("Erro do Autentique: " + result.errors.map(e => e.message).join(", "));
+            const msg = result.errors.map(e => e.message).join(", ");
+            alert("Erro do Autentique: " + msg);
             return false;
         }
 
-        console.log("Autentique Success:", result.data.createDocument);
-        return true;
+        if (result.data && result.data.createDocument) {
+            console.log("Autentique Success:", result.data.createDocument);
+            return true;
+        }
+        
+        return false;
     } catch (error) {
         console.error("Fetch Error (CORS or Network):", error);
-        alert("Erro de Rede/CORS: Não foi possível conectar ao Autentique. Se estiver abrindo o arquivo localmente pelo navegador, isso pode ser um bloqueio de segurança (CORS). Tente rodar um servidor local ou verifique o console do desenvolvedor (F12).");
+        alert("Erro de Rede/CORS: Não foi possível conectar ao Autentique. Se você estiver vendo isso no navegador, pode ser um bloqueio de segurança. Verifique o console (F12) para detalhes.");
         return false;
     }
 }

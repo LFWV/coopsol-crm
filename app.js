@@ -948,7 +948,7 @@ window.handleRegister = async (e) => {
     }
 };
 
-let currentSimData = null;
+window.currentSimData = null;
 
 window.handleSimulation = async (e, editId = null) => {
     e.preventDefault();
@@ -993,7 +993,7 @@ window.handleSimulation = async (e, editId = null) => {
     const newBill = Math.max(0, coopBill + utilityBill);
     const savings = Math.max(0, value - newBill);
     
-    currentSimData = { 
+    window.currentSimData = { 
         id: editId,
         name, 
         documentId,
@@ -1015,7 +1015,7 @@ window.handleSimulation = async (e, editId = null) => {
         temperature,
         sellerId,
         billFile,
-        billUrl: currentSimData ? currentSimData.billUrl : null,
+        billUrl: window.currentSimData ? window.currentSimData.billUrl : null,
         billValue: value, 
         discountPercent: discount, 
         savings,
