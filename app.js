@@ -1752,3 +1752,19 @@ const ViewAnalytics = async () => {
 // Start App
 if(currentUser) navigate('dashboard');
 else navigate('login');
+async function testarEnvio() {
+  const response = await fetch("/api/enviar-contrato", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      nome: "João",
+      emailCliente: "cliente@email.com",
+      emailEmpresa: "empresa@email.com"
+    }),
+  });
+
+  const data = await response.json();
+  console.log(data);
+}
