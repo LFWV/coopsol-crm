@@ -208,14 +208,16 @@ async function sendToAutentique(pdfBlob, filename, clientEmail) {
         const result = await response.json();
         
         if (result.errors) {
-            console.error("GraphQL Errors:", result.errors);
+            console.error("Autentique GraphQL Errors:", JSON.stringify(result.errors, null, 2));
+            alert("Erro do Autentique: " + result.errors.map(e => e.message).join(", "));
             return false;
         }
 
         console.log("Autentique Success:", result.data.createDocument);
         return true;
     } catch (error) {
-        console.error("Fetch Error:", error);
+        console.error("Fetch Error (CORS or Network):", error);
+        alert("Erro de Rede/CORS: Não foi possível conectar ao Autentique. Se estiver abrindo o arquivo localmente pelo navegador, isso pode ser um bloqueio de segurança (CORS). Tente rodar um servidor local ou verifique o console do desenvolvedor (F12).");
         return false;
     }
 }

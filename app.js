@@ -1068,6 +1068,15 @@ window.saveClient = async (status) => {
     if(!currentSimData) return;
     
     let clientId = currentSimData.id ? currentSimData.id : Date.now().toString();
+    
+    // Validação de UC Duplicada
+    if (currentSimData.ucNumber) {
+        const allClients = await db.getClients();
+        const duplicate = allClients.find(c => c.ucNumber === currentSimData.ucNumber && String(c.id) !== String(clientId));
+        if (duplicate) {
+            return alert(`Erro: Esta Unidade Consumidora (UC: ${currentSimData.ucNumber}) já está cadastrada para o cliente ${duplicate.name}.`);
+        }
+    }
 
     // Upload de arquivo
     if(currentSimData.billFile) {
@@ -1544,8 +1553,16 @@ window.saveClientMetadataOnly = async (id) => {
         contractStatus: document.getElementById('sim-contract-status').value,
         temperature: document.getElementById('sim-temperature').value,
         repClass: document.getElementById('sim-rep-class').value,
-        // ... (other fields if needed)
     };
+
+    // Validação de UC Duplicada
+    if (data.ucNumber) {
+        const allClients = await db.getClients();
+        const duplicate = allClients.find(c => c.ucNumber === data.ucNumber && String(c.id) !== String(id));
+        if (duplicate) {
+            return alert(`Erro: Esta Unidade Consumidora (UC: ${data.ucNumber}) já está cadastrada para o cliente ${duplicate.name}.`);
+        }
+    }
     try {
         await db.saveClient(data);
         alert('Dados salvos com sucesso!');
@@ -1711,9 +1728,6 @@ const ViewAnalytics = async () => {
                     <h2 style="margin:0;">Dashboard Analytics</h2>
                     <p style="color:var(--text-muted); font-size:0.9rem;">Visão geral de performance e conversões</p>
                 </div>
-                <button class="btn btn-outline" onclick="toggleAnalyticsUnit()" style="display:flex; align-items:center; gap:0.5rem; border-color:var(--accent-primary); color:var(--accent-primary);">
-                    🔄 Alternar para ${analyticsUnit === 'kWh' ? 'Reais (R$)' : 'Volume (kWh)'}
-                </button>
             </div>
             
             <div class="stats-grid" style="margin-bottom: 2rem;">
