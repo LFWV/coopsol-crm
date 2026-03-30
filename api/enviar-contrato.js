@@ -27,7 +27,10 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: "Dados incompletos (pdfBase64 ou emailCliente faltando)" });
     }
 
-    const AUTENTIQUE_TOKEN = process.env.AUTENTIQUE_TOKEN || '3453d57e0272da53b4d0efd06505bb33cbf18f54784dcb7acc0f5e8177254a1f';
+    const AUTENTIQUE_TOKEN = process.env.AUTENTIQUE_TOKEN;
+    if (!AUTENTIQUE_TOKEN) {
+      return res.status(500).json({ error: "Token do Autentique não configurado. Adicione AUTENTIQUE_TOKEN nas variáveis de ambiente do Vercel." });
+    }
     const GRAPHQL_URL = 'https://api.autentique.com.br/v2/graphql';
 
     // Converter Base64 para Buffer
