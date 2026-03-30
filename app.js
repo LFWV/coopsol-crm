@@ -12,6 +12,37 @@ firebase.initializeApp(firebaseConfig);
 const firestore = firebase.firestore();
 const storage = firebase.storage();
 
+// ---- CACHE SYSTEM ----
+let allClientsCache = null;
+let allUsersCache = null;
+
+async function getClientsData(forceRefresh = false) {
+    if (!allClientsCache || forceRefresh) {
+        allClientsCache = await db.getClients();
+    }
+    return allClientsCache;
+}
+
+async function getUsersData(forceRefresh = false) {
+    if (!allUsersCache || forceRefresh) {
+        allUsersCache = await db.getUsers();
+    }
+    return allUsersCache;
+}
+
+function invalidateCaches() {
+    allClientsCache = null;
+    allUsersCache = null;
+}
+
+const debounce = (func, wait) => {
+    let timeout;
+    return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), wait);
+    };
+};
+
 const db = {
     getGlobalKwhPrice: async () => {
         try {
@@ -184,8 +215,17 @@ async function navigate(route, data = null) {
     }
     else if(route === 'clients') {
         if(!currentUser) return navigate('login');
-        app.innerHTML = '<div style="text-align:center; padding: 3rem; font-size: 1.2rem; color: var(--text-main);">Carregando Clientes...</div>';
-        app.innerHTML = await ViewClients();
+        
+        // Verifica se já estamos na página de clientes para não reconstruir o 'esqueleto'
+        const inputSearch = document.getElementById('filter-search');
+        if(!inputSearch) {
+            // Primeiro load da página: mostra carregando e constrói o esqueleto
+            app.innerHTML = '<div style="text-align:center; padding: 3rem; font-size: 1.2rem; color: var(--text-main);">Carregando Clientes...</div>';
+            app.innerHTML = await ViewClients();
+        } else {
+            // Já estamos na página: apenas atualiza a tabela silenciosamente
+            updateDashboardFilters(inputSearch.value, document.getElementById('filter-status').value, document.getElementById('filter-seller') ? document.getElementById('filter-seller').value : 'all');
+        }
     }
     else if(route === 'settings') {
         if(!currentUser) return navigate('login');
@@ -421,34 +461,8 @@ const ViewSettings = async () => {
     </div>`;
 };
 
-const ViewClients = async () => {
-    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
-    const allClients = await db.getClients();
-    const users = isAdmin ? await db.getUsers() : [];
-
-    // Filtros atuais
-    const { search, status, sellerId } = currentFilters;
-
-    let filtered = allClients;
-    if(!isAdmin) {
-        filtered = filtered.filter(c => c.sellerId === currentUser.id);
-    } else if(sellerId !== 'all') {
-        filtered = filtered.filter(c => String(c.sellerId) === String(sellerId));
-    }
-
-    if(status !== 'all') {
-        filtered = filtered.filter(c => c.status === status);
-    }
-
-    if(search) {
-        const s = search.toLowerCase();
-        filtered = filtered.filter(c => 
-            c.name.toLowerCase().includes(s) || 
-            (c.documentId && c.documentId.includes(s))
-        );
-    }
-
-    const tableRows = filtered.map(c => {
+const renderClientRows = (filtered, isAdmin, users) => {
+    return filtered.map(c => {
         const clsStatus = c.status.toLowerCase().replace(/\s+/g, '-').replace('ç','c').replace('ã','a');
         const sellerName = isAdmin ? `<br><small style="color:var(--text-muted)">Vendedor(a): ${users.find(u => String(u.id) === String(c.sellerId))?.name || 'Desconhecido'}</small>` : '';
         const tempOptions = ['Quente', 'Morno', 'Frio', 'Fechado'];
@@ -490,7 +504,36 @@ const ViewClients = async () => {
             </td>
         </tr>`;
     }).join('');
+};
 
+const ViewClients = async () => {
+    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    const allClients = await getClientsData();
+    const users = isAdmin ? await getUsersData() : [];
+
+    // Filtros atuais
+    const { search, status, sellerId } = currentFilters;
+
+    let filtered = allClients;
+    if(!isAdmin) {
+        filtered = filtered.filter(c => c.sellerId === currentUser.id);
+    } else if(sellerId !== 'all') {
+        filtered = filtered.filter(c => String(c.sellerId) === String(sellerId));
+    }
+
+    if(status !== 'all') {
+        filtered = filtered.filter(c => c.status === status);
+    }
+
+    if(search) {
+        const s = search.toLowerCase();
+        filtered = filtered.filter(c => 
+            c.name.toLowerCase().includes(s) || 
+            (c.documentId && c.documentId.includes(s))
+        );
+    }
+
+    const tableRowsHtml = renderClientRows(filtered, isAdmin, users);
     const sellerOptions = users.map(u => `<option value="${u.id}" ${sellerId === String(u.id) ? 'selected' : ''}>${u.name}</option>`).join('');
 
     return `
@@ -543,7 +586,7 @@ const ViewClients = async () => {
                             <th>Ações</th>
                         </tr>
                     </thead>
-                    <tbody>${tableRows || '<tr><td colspan="6" style="text-align:center; padding: 2rem;">Nenhum cliente encontrado com os filtros aplicados.</td></tr>'}</tbody>
+                    <tbody id="clients-table-body">${tableRowsHtml || '<tr><td colspan="7" style="text-align:center; padding: 2rem;">Nenhum cliente encontrado com os filtros aplicados.</td></tr>'}</tbody>
                 </table>
             </div>
         </div>
@@ -1122,6 +1165,7 @@ window.saveClient = async (status) => {
     
     try {
         await db.saveClient(clientData);
+        invalidateCaches();
         
         if(status !== 'Fechado') {
             alert('Cliente salvo na nuvem com sucesso!');
@@ -1280,7 +1324,8 @@ window.deactivateClient = async (id) => {
         if(client) {
             client.status = 'Perdida';
             await db.saveClient(client);
-            navigate('dashboard');
+            invalidateCaches();
+            navigate('clients');
         } else {
             alert('Erro: Cliente não encontrado no banco de dados local com ID: ' + id);
         }
@@ -1301,7 +1346,8 @@ window.deleteClient = async (id) => {
     if(confirm('Passo 1/2: Você está prestes a excluir este cliente permanentemente. Continuar?')) {
         if(confirm('Passo 2/2: EXCLUSÃO PERMANENTE. Confirmar EXCLUSÃO?')) {
             await db.deleteClient(id);
-            navigate('dashboard');
+            invalidateCaches();
+            navigate('clients');
         }
     }
 };
@@ -1502,9 +1548,40 @@ window.updateGlobalKwhPrice = async () => {
     alert('Preço Global Atualizado com Sucesso!');
 };
 
-window.updateDashboardFilters = (search, status, sellerId) => {
+window.updateDashboardFilters = async (search, status, sellerId) => {
     currentFilters = { search, status, sellerId };
-    navigate('clients');
+
+    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    
+    // Pega dados do cache (quase instantâneo)
+    const allClients = await getClientsData();
+    const users = isAdmin ? await getUsersData() : [];
+
+    let filtered = allClients;
+    if(!isAdmin) {
+        filtered = filtered.filter(c => c.sellerId === currentUser.id);
+    } else if(sellerId !== 'all') {
+        filtered = filtered.filter(c => String(c.sellerId) === String(sellerId));
+    }
+
+    if(status !== 'all') {
+        filtered = filtered.filter(c => c.status === status);
+    }
+
+    if(search) {
+        const s = search.toLowerCase();
+        filtered = filtered.filter(c => 
+            c.name.toLowerCase().includes(s) || 
+            (c.documentId && c.documentId.includes(s))
+        );
+    }
+
+    const tbody = document.getElementById('clients-table-body');
+    if (tbody) {
+        // ATUALIZAÇÃO CIRÚRGICA: Apenas o corpo da tabela muda. 
+        // O campo de busca lá em cima continua intacto, sem perder o foco ou sofrer piscada.
+        tbody.innerHTML = renderClientRows(filtered, isAdmin, users) || '<tr><td colspan="7" style="text-align:center; padding: 2rem;">Nenhum cliente encontrado com os filtros aplicados.</td></tr>';
+    }
 };
 
 window.updateCommissionFilter = (vendedorId) => {
@@ -1520,6 +1597,7 @@ window.toggleAnalyticsUnit = () => {
 window.updateContractStatus = async (id, status) => {
     try {
         await db.saveClient({ id, contractStatus: status });
+        invalidateCaches();
         alert('Status do contrato atualizado!');
     } catch(e) { alert('Erro ao atualizar status'); }
 };
@@ -1527,6 +1605,7 @@ window.updateContractStatus = async (id, status) => {
 window.updateClientTemperature = async (id, temp) => {
     try {
         await db.saveClient({ id, temperature: temp });
+        invalidateCaches();
         alert('Temperatura do lead atualizada!');
         navigate('clients');
     } catch(e) { alert('Erro ao atualizar temperatura'); }
@@ -1537,6 +1616,7 @@ window.updateClientSeller = async (id) => {
     if(!newSellerId) return alert('Selecione um vendedor.');
     try {
         await db.saveClient({ id, sellerId: newSellerId });
+        invalidateCaches();
         alert('Vendedor responsável atualizado!');
         navigate('clients');
     } catch(e) { alert('Erro ao atualizar vendedor'); }
@@ -1565,6 +1645,7 @@ window.saveClientMetadataOnly = async (id) => {
     }
     try {
         await db.saveClient(data);
+        invalidateCaches();
         alert('Dados salvos com sucesso!');
         navigate('clients');
     } catch(e) { alert('Erro ao salvar dados'); }

@@ -1,55 +1,95 @@
+// Vercel Serverless Function - api/enviar-contrato.js
+// Proxy para evitar problemas de CORS e manter o token seguro
+
 module.exports = async (req, res) => {
+  // Habilitar CORS para permitr chamadas do frontend
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+  );
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método não permitido" });
   }
 
   try {
-    const { nome, emailCliente, emailEmpresa } = req.body;
+    const { filename, pdfBase64, emailCliente } = req.body;
 
-    // 🔹 contrato simples (depois vamos melhorar)
-    const contratoHTML = `
-      <h1>Contrato</h1>
-      <p>Cliente: ${nome}</p>
-      <p>Email: ${emailCliente}</p>
-    `;
+    if (!pdfBase64 || !emailCliente) {
+      return res.status(400).json({ error: "Dados incompletos (pdfBase64 ou emailCliente faltando)" });
+    }
 
-    const base64PDF = Buffer.from(contratoHTML).toString("base64");
+    const AUTENTIQUE_TOKEN = process.env.AUTENTIQUE_TOKEN || '3453d57e0272da53b4d0efd06505bb33cbf18f54784dcb7acc0f5e8177254a1f';
+    const GRAPHQL_URL = 'https://api.autentique.com.br/v2/graphql';
 
-    const response = await fetch("https://api.autentique.com.br/v2/graphql", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.AUTENTIQUE_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    // Converter Base64 para Buffer
+    const buffer = Buffer.from(pdfBase64, 'base64');
+
+    // Preparar o multipart/form-data manual (já que o Autentique exige o padrão GraphQL multipart)
+    const operations = JSON.stringify({
         query: `
-          mutation {
-            createDocument(
-              document: { name: "Contrato ${nome}" },
-              signers: [
-                { email: "${emailCliente}", action: SIGN },
-                { email: "${emailEmpresa}", action: SIGN }
-              ],
-              file: "${base64PDF}"
-            ) {
-              id
+            mutation CreateDocumentMutation($document: DocumentInput!, $signers: [SignerInput!]!, $file: Upload!) {
+                createDocument(document: $document, signers: $signers, file: $file) {
+                    id
+                    name
+                }
             }
-          }
         `,
-      }),
+        variables: {
+            document: { name: filename || "Contrato Coopsol" },
+            signers: [
+                { email: emailCliente, action: 'SIGN' },
+                { email: 'vinicius.pereira@callieres.com', action: 'SIGN' }
+            ],
+            file: null
+        }
     });
 
-    const data = await response.json();
+    const map = JSON.stringify({ "0": ["variables.file"] });
 
-    console.log("RESPOSTA AUTENTIQUE:", data);
+    // No Node.js ambiente Vercel, usamos FormData se disponível ou criamos o corpo manual
+    // Para garantir compatibilidade total, vamos usar a abordagem de FormData se o ambiente suportar
+    // Caso contrário, uma alternativa seria o pacote 'form-data', mas não queremos instalar deps extras se possível.
+    
+    // Vercel Serverless Functions (Node.js 18+) suportam FormData nativo.
+    const formData = new FormData();
+    formData.append('operations', operations);
+    formData.append('map', map);
+    
+    // Criar um Blob a partir do Buffer para o FormData
+    const blob = new Blob([buffer], { type: 'application/pdf' });
+    formData.append('0', blob, filename || 'contrato.pdf');
+
+    const response = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${AUTENTIQUE_TOKEN}`
+        },
+        body: formData
+    });
+
+    const result = await response.json();
+    console.log("Resultado Autentique:", result);
+
+    if (result.errors) {
+        return res.status(400).json({ ok: false, errors: result.errors });
+    }
 
     return res.status(200).json({
       ok: true,
-      documentId: data?.data?.createDocument?.id || null,
+      document: result.data.createDocument,
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("Erro no Proxy Autentique:", error);
     return res.status(500).json({ error: error.message });
   }
 };

@@ -178,69 +178,56 @@ window.closeContract = async () => {
 };
 
 async function sendToAutentique(pdfBlob, filename, clientEmail) {
-    const AUTENTIQUE_TOKEN = '3453d57e0272da53b4d0efd06505bb33cbf18f54784dcb7acc0f5e8177254a1f';
-    const GRAPHQL_URL = 'https://api.autentique.com.br/v2/graphql';
+    // Agora enviamos para nossa própria API na Vercel para evitar problemas de CORS
+    const PROXY_URL = '/api/enviar-contrato';
 
-    console.log("Iniciando envio para Autentique...", { filename, clientEmail });
+    console.log("Iniciando envio para o Proxy da Vercel...", { filename, clientEmail });
+    
     if (!clientEmail || !clientEmail.includes('@')) {
-        alert("Erro: E-mail do cliente inválido ou ausente. Por favor, preencha o e-mail no formulário de simulação.");
+        alert("Erro: E-mail do cliente inválido ou ausente.");
         return false;
     }
 
-    const operations = JSON.stringify({
-        query: `
-            mutation CreateDocumentMutation($document: DocumentInput!, $signers: [SignerInput!]!, $file: Upload!) {
-                createDocument(document: $document, signers: $signers, file: $file) {
-                    id
-                    name
-                }
-            }
-        `,
-        variables: {
-            document: { name: filename },
-            signers: [
-                { email: clientEmail, action: 'SIGN' },
-                { email: 'vinicius.pereira@callieres.com', action: 'SIGN' }
-            ],
-            file: null
-        }
-    });
-
-    const map = JSON.stringify({ "0": ["variables.file"] });
-
-    const formData = new FormData();
-    formData.append('operations', operations);
-    formData.append('map', map);
-    formData.append('0', pdfBlob, filename);
-
     try {
-        const response = await fetch(GRAPHQL_URL, {
+        // Converter Blob para Base64 para envio JSON seguro
+        const reader = new FileReader();
+        const pdfBase64 = await new Promise((resolve, reject) => {
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(pdfBlob);
+        });
+
+        const response = await fetch(PROXY_URL, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${AUTENTIQUE_TOKEN}`
+                'Content-Type': 'application/json'
             },
-            body: formData
+            body: JSON.stringify({
+                filename,
+                pdfBase64,
+                emailCliente: clientEmail
+            })
         });
 
         const result = await response.json();
-        console.log("Resultado Autentique:", result);
-        
-        if (result.errors) {
-            console.error("Autentique GraphQL Errors:", JSON.stringify(result.errors, null, 2));
-            const msg = result.errors.map(e => e.message).join(", ");
-            alert("Erro do Autentique: " + msg);
+        console.log("Resultado do Proxy:", result);
+
+        if (!result.ok) {
+            console.error("Erro no Proxy/Autentique:", result.errors || result.error);
+            const msg = result.errors ? result.errors.map(e => e.message).join(", ") : (result.error || "Erro desconhecido");
+            alert("Erro ao enviar contrato: " + msg);
             return false;
         }
 
-        if (result.data && result.data.createDocument) {
-            console.log("Autentique Success:", result.data.createDocument);
+        if (result.ok && result.document) {
+            console.log("Sucesso Autentique:", result.document);
             return true;
         }
-        
+
         return false;
     } catch (error) {
-        console.error("Fetch Error (CORS or Network):", error);
-        alert("Erro de Rede/CORS: Não foi possível conectar ao Autentique. Se você estiver vendo isso no navegador, pode ser um bloqueio de segurança. Verifique o console (F12) para detalhes.");
+        console.error("Erro na comunicação com o Proxy:", error);
+        alert("Erro de conexão ao tentar assinar contrato. Verifique sua rede e tente novamente.");
         return false;
     }
 }
