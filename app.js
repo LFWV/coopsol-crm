@@ -555,10 +555,8 @@ const ViewClients = async () => {
                         <label>📊 Status</label>
                         <select id="filter-status" onchange="updateDashboardFilters(document.getElementById('filter-search').value, this.value, ${isAdmin ? "document.getElementById('filter-seller').value" : "'all'"})" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); font-size: 0.85rem; border-radius: 6px; padding: 0.4rem;">
                             <option value="all" ${status === 'all' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Todos os Status</option>
-                            <option value="Lead" ${status === 'Lead' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Lead</option>
                             <option value="Em Negociação" ${status === 'Em Negociação' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Em Negociação</option>
                             <option value="Fechado" ${status === 'Fechado' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Fechado</option>
-                            <option value="Convertido" ${status === 'Convertido' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Convertido</option>
                             <option value="Perdida" ${status === 'Perdida' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Perdida</option>
                         </select>
                     </div>
@@ -1089,7 +1087,7 @@ window.handleSimulation = async (e, editId = null) => {
             </div>
 
             <div class="result-actions">
-                <button class="btn btn-outline" onclick="saveClient('Em negociação')">Salvar Em negociação</button>
+                <button class="btn btn-outline" onclick="saveClient('Em Negociação')">Salvar Em Negociação</button>
                 <button class="btn btn-success" onclick="closeContract()">✨ Emitir Contrato e Fechar</button>
             </div>
         `;
@@ -1101,7 +1099,7 @@ window.handleSimulation = async (e, editId = null) => {
                 O consumo de ${kwh} kWh informado não atinge o mínimo (acima de 250 kWh) para desconto.
             </div>
             <div class="result-actions">
-                <button class="btn btn-outline" onclick="saveClient('Em negociação')">Salvar Em negociação</button>
+                <button class="btn btn-outline" onclick="saveClient('Em Negociação')">Salvar Em Negociação</button>
             </div>
         `;
     }
@@ -1565,7 +1563,7 @@ window.updateDashboardFilters = async (search, status, sellerId) => {
     }
 
     if(status !== 'all') {
-        filtered = filtered.filter(c => c.status === status);
+        filtered = filtered.filter(c => c.status.toLowerCase() === status.toLowerCase());
     }
 
     if(search) {
@@ -1719,7 +1717,7 @@ const ViewAnalytics = async () => {
     
     // Filtros e Cálculos
     const closedClients = clients.filter(c => c.status === 'Fechado' || c.status === 'Convertido');
-    const negClients = clients.filter(c => c.status === 'Em Negociação' || c.status === 'Lead');
+    const negClients = clients.filter(c => c.status === 'Em Negociação' || c.status === 'Em negociação' || c.status === 'Lead');
     const lostClients = clients.filter(c => c.status === 'Perdida' || c.status === 'Desativado');
 
     const totalKwhClosed = closedClients.reduce((acc, c) => acc + (parseFloat(c.kwh) || 0), 0);
@@ -1736,10 +1734,16 @@ const ViewAnalytics = async () => {
 
     // Dados por Vendedor
     const sellerPerformance = users.map(u => {
-        const userKwh = clients.filter(c => String(c.sellerId) === String(u.id) && (c.status === 'Fechado' || c.status === 'Convertido'))
+        const soldKwh = clients.filter(c => String(c.sellerId) === String(u.id) && (c.status === 'Fechado' || c.status === 'Convertido'))
+                               .reduce((acc, c) => acc + (parseFloat(c.kwh) || 0), 0);
+        const negKwh = clients.filter(c => String(c.sellerId) === String(u.id) && (c.status.toLowerCase() === 'em negociação' || c.status.toLowerCase() === 'lead'))
                               .reduce((acc, c) => acc + (parseFloat(c.kwh) || 0), 0);
-        return { name: u.name, value: analyticsUnit === 'kWh' ? userKwh : userKwh * factor };
-    }).sort((a, b) => b.value - a.value).slice(0, 5);
+        return { 
+            name: u.name, 
+            sold: analyticsUnit === 'kWh' ? soldKwh : soldKwh * factor,
+            negotiating: analyticsUnit === 'kWh' ? negKwh : negKwh*factor
+        };
+    }).sort((a, b) => b.sold - a.sold).slice(0, 5);
 
     // Status do Contrato
     const statusCounts = {
@@ -1755,16 +1759,15 @@ const ViewAnalytics = async () => {
         new Chart(ctx1, {
             type: 'bar',
             data: {
-                labels: ['Fechado', 'Negociando', 'Lead', 'Perdido'],
+                labels: ['Fechado', 'Em Negociação', 'Perdido'],
                 datasets: [{
                     label: analyticsUnit,
                     data: [
                         analyticsUnit === 'kWh' ? totalKwhClosed : valClosed,
-                        analyticsUnit === 'kWh' ? negClients.filter(c => c.status === 'Em Negociação').reduce((acc,c)=>acc+(parseFloat(c.kwh)||0),0) : negClients.filter(c => c.status === 'Em Negociação').reduce((acc,c)=>acc+(parseFloat(c.kwh)||0),0)*factor,
-                        analyticsUnit === 'kWh' ? negClients.filter(c => c.status === 'Lead').reduce((acc,c)=>acc+(parseFloat(c.kwh)||0),0) : negClients.filter(c => c.status === 'Lead').reduce((acc,c)=>acc+(parseFloat(c.kwh)||0),0)*factor,
+                        analyticsUnit === 'kWh' ? totalKwhNeg : valNeg,
                         analyticsUnit === 'kWh' ? totalKwhLost : valLost
                     ],
-                    backgroundColor: ['#10b981', '#f59e0b', '#3b82f6', '#94a3b8']
+                    backgroundColor: ['#10b981', '#f59e0b', '#94a3b8']
                 }]
             },
             options: { responsive: true, plugins: { legend: { display: false } } }
@@ -1776,13 +1779,28 @@ const ViewAnalytics = async () => {
             type: 'bar',
             data: {
                 labels: sellerPerformance.map(s => s.name),
-                datasets: [{
-                    label: analyticsUnit,
-                    data: sellerPerformance.map(s => s.value),
-                    backgroundColor: '#8b5cf6'
-                }]
+                datasets: [
+                    {
+                        label: 'Vendido',
+                        data: sellerPerformance.map(s => s.sold),
+                        backgroundColor: '#3b82f6'
+                    },
+                    {
+                        label: 'Negociando',
+                        data: sellerPerformance.map(s => s.negotiating),
+                        backgroundColor: '#f59e0b'
+                    }
+                ]
             },
-            options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
+            options: { 
+                indexAxis: 'y', 
+                responsive: true, 
+                scales: {
+                    x: { stacked: true },
+                    y: { stacked: true }
+                },
+                plugins: { legend: { display: true } } 
+            }
         });
 
         // Grafico 3: Status Contrato
