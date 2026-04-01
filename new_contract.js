@@ -157,10 +157,17 @@ window.closeContract = async () => {
         }
 
         const filename = `Contrato_CoopSol_${currentSimData.name.replace(/\s+/g, '')}.pdf`;
-        const success = await sendToAutentique(pdfBlob, filename, currentSimData.email);
-        
-        if (success) {
-            alert('Contrato enviado com sucesso para assinatura no Autentique!');
+        const autentiqueDocId = await sendToAutentique(pdfBlob, filename, currentSimData.email);
+
+        if (autentiqueDocId) {
+            // Salva o ID do documento Autentique e atualiza status no Firebase
+            await firestore.collection('clients').doc(String(currentSimData.id)).update({
+                autentiqueDocId: autentiqueDocId,
+                contractStatus: 'Aguardando assinatura',
+                contractSentAt: new Date().toISOString()
+            });
+            invalidateCaches();
+            alert('✅ Contrato enviado para assinatura no Autentique!\nO cliente receberá o link por e-mail.');
         } else {
             alert('O contrato foi baixado, mas houve um erro ao enviar para o Autentique. Por favor, envie manualmente.');
         }
@@ -178,14 +185,22 @@ window.closeContract = async () => {
 };
 
 async function sendToAutentique(pdfBlob, filename, clientEmail) {
-    // Agora enviamos para nossa própria API na Vercel para evitar problemas de CORS
+    // Agora enviamos para nossa própria API (Express) para evitar problemas de CORS
     const PROXY_URL = '/api/enviar-contrato';
 
-    console.log("Iniciando envio para o Proxy da Vercel...", { filename, clientEmail });
+    console.log("🚀 Iniciando envio para Autentique via Proxy...", { 
+        url: window.location.origin + PROXY_URL,
+        filename, 
+        clientEmail 
+    });
     
+    if (window.location.port !== '3000' && window.location.hostname === 'localhost') {
+        alert("⚠️ ATENÇÃO: Você está usando a porta " + window.location.port + ".\nPara o Autentique funcionar, use: http://localhost:3000");
+    }
+
     if (!clientEmail || !clientEmail.includes('@')) {
-        alert("Erro: E-mail do cliente inválido ou ausente.");
-        return false;
+        alert("❌ Erro: E-mail do cliente inválido ou ausente.");
+        return null;
     }
 
     try {
@@ -199,35 +214,32 @@ async function sendToAutentique(pdfBlob, filename, clientEmail) {
 
         const response = await fetch(PROXY_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                filename,
-                pdfBase64,
-                emailCliente: clientEmail
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename, pdfBase64, emailCliente: clientEmail })
         });
 
-        const result = await response.json();
-        console.log("Resultado do Proxy:", result);
-
-        if (!result.ok) {
-            console.error("Erro no Proxy/Autentique:", result.errors || result.error);
-            const msg = result.errors ? result.errors.map(e => e.message).join(", ") : (result.error || "Erro desconhecido");
-            alert("Erro ao enviar contrato: " + msg);
-            return false;
+        if (!response.ok) {
+            const errorRaw = await response.text();
+            let errorJson;
+            try { errorJson = JSON.parse(errorRaw); } catch(e) {}
+            
+            console.error("❌ Erro na Resposta do Servidor:", response.status, errorJson || errorRaw);
+            const msg = errorJson?.error || errorJson?.errors?.map(e => e.message).join(", ") || "Erro interno do servidor";
+            alert("❌ Erro ao enviar contrato (Status " + response.status + "): " + msg);
+            return null;
         }
+
+        const result = await response.json();
+        console.log("✅ Resultado do Proxy:", result);
 
         if (result.ok && result.document) {
-            console.log("Sucesso Autentique:", result.document);
-            return true;
+            return result.document.id;
         }
 
-        return false;
+        return null;
     } catch (error) {
-        console.error("Erro na comunicação com o Proxy:", error);
-        alert("Erro de conexão ao tentar assinar contrato. Verifique sua rede e tente novamente.");
-        return false;
+        console.error("❌ Erro de Conexão:", error);
+        alert("❌ Erro de conexão: Não foi possível alcançar o servidor local.\nVerifique se o 'node server.js' está rodando na porta 3000.");
+        return null;
     }
 }

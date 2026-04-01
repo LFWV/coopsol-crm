@@ -187,6 +187,53 @@ const auth = {
 // ---- UTILS ----
 const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', {style: 'currency', currency: 'BRL'}).format(val);
 
+function getContractStatusStyle(status) {
+    const styles = {
+        'Em preparação':       'background: rgba(100,116,139,0.1); color: #64748b; border: 1px solid rgba(100,116,139,0.3);',
+        'Pronto':              'background: rgba(59,130,246,0.1); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3);',
+        'Aguardando assinatura': 'background: rgba(217,119,6,0.1); color: #d97706; border: 1px solid rgba(217,119,6,0.3);',
+        'Assinado':            'background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid rgba(16,185,129,0.3);',
+        'Recusado':            'background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);',
+    };
+    return styles[status] || styles['Em preparação'];
+}
+
+window.checkContractStatus = async (clientId, autentiqueDocId) => {
+    const badge = document.getElementById(`contract-status-badge-${clientId}`);
+    if (badge) { badge.textContent = '⏳ Consultando...'; badge.style = 'background:rgba(100,116,139,0.1);color:#64748b;border:1px solid rgba(100,116,139,0.3);padding:0.2rem 0.6rem;border-radius:6px;font-size:0.8rem;'; }
+
+    try {
+        const res = await fetch(`/api/status-contrato/${autentiqueDocId}`);
+        const data = await res.json();
+
+        if (!data.ok) {
+            alert('Erro ao consultar Autentique: ' + (data.error || 'Erro desconhecido'));
+            return;
+        }
+
+        const newStatus = data.status;
+
+        // Atualiza no Firebase se status mudou
+        await db.saveClient({ id: clientId, contractStatus: newStatus, ...(newStatus === 'Assinado' ? { contractSignedAt: new Date().toISOString() } : {}) });
+        invalidateCaches();
+
+        // Atualiza badge na tela
+        if (badge) {
+            badge.textContent = newStatus;
+            badge.setAttribute('style', getContractStatusStyle(newStatus) + 'padding:0.2rem 0.6rem;border-radius:6px;font-size:0.8rem;');
+        }
+
+        const sigInfo = data.signatures.map(s =>
+            `${s.name || s.email}: ${s.signed ? '✅ Assinado' : (s.rejected ? '❌ Recusado' : (s.viewed ? '👁️ Visualizou' : '⏳ Pendente'))}`
+        ).join('\n');
+
+        alert(`Status do contrato: ${newStatus}\n\n${sigInfo}`);
+
+    } catch(e) {
+        alert('Erro de conexão ao verificar status: ' + e.message);
+    }
+};
+
 // ---- THEME ----
 (function initTheme() {
     const saved = localStorage.getItem('crm_theme') || 'light';
@@ -1269,7 +1316,12 @@ const ViewClientDetailsOnly = async (client) => {
                 </div>
                 <div>
                     <strong style="color: var(--text-muted); font-size: 0.85rem;">Status do Contrato</strong>
-                    <div style="margin-top: 0.3rem;"><span class="status-badge" style="background: rgba(217, 119, 6, 0.1); color: #d97706; border: 1px solid rgba(217, 119, 6, 0.2);">${client.contractStatus || 'Não informado'}</span></div>
+                    <div style="margin-top: 0.3rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                        <span id="contract-status-badge-${client.id}" class="status-badge" style="${getContractStatusStyle(client.contractStatus)}">${client.contractStatus || 'Em preparação'}</span>
+                        ${client.autentiqueDocId ? `<button onclick="checkContractStatus('${client.id}', '${client.autentiqueDocId}')" style="font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:6px; border:1px solid var(--accent-primary); background:transparent; color:var(--accent-primary); cursor:pointer;" title="Consultar Autentique">🔄 Verificar</button>` : ''}
+                    </div>
+                    ${client.contractSentAt ? `<div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">Enviado em ${new Date(client.contractSentAt).toLocaleDateString('pt-BR')}</div>` : ''}
+                    ${client.contractSignedAt ? `<div style="font-size:0.75rem; color:#10b981; margin-top:0.1rem;">✅ Assinado em ${new Date(client.contractSignedAt).toLocaleDateString('pt-BR')}</div>` : ''}
                 </div>
                 <div>
                     <strong style="color: var(--text-muted); font-size: 0.85rem;">Nº Unidade Consumidora / Instalação</strong>
@@ -1283,7 +1335,6 @@ const ViewClientDetailsOnly = async (client) => {
 
             <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
                 ${client.billUrl ? `<a href="${client.billUrl}" target="_blank" class="btn btn-outline" style="flex: 1; border-color: var(--accent-primary); color: var(--accent-primary); text-decoration: none; text-align: center; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><span>👁️</span> Ver Conta de Luz Anexada</a>` : ''}
-                <button class="btn btn-primary" style="flex: 1;" onclick="navigate('simulation', client)">✏️ Editar / Atualizar Dados</button>
             </div>
 
             <div style="border-top: 1px solid var(--panel-border); padding-top: 1.5rem;">
@@ -1364,153 +1415,7 @@ window.toggleUserStatus = async (id, newStatus) => {
     }
 };
 
-window.closeContract = async () => {
-    if (!currentSimData) return;
-    
-    // Logo em Base64
-    const logoBase64 = 'data:image/png;base64,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';
 
-    const hoje = new Date();
-    const dataFormatada = hoje.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-
-    // Lógica para o texto do Cooperado (PF ou PJ)
-    const pjText = currentSimData.repClass === "Pessoa Jurídica" 
-        ? `QUALIFICAÇÃO – PESSOA JURÍDICA ${currentSimData.name}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${currentSimData.documentId}, com sede à ${currentSimData.address}, neste ato representada por seu(s) representante(s) legal(is), ${currentSimData.repName || '[NOME COMPLETO DO REPRESENTANTE]'}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, inscrito no CPF nº ${currentSimData.repCpf || '[CPF]'}, residente e domiciliado à ${currentSimData.repAddress || '[endereço completo do representante]'}, doravante denominada simplesmente "COOPERADO".`
-        : `${currentSimData.name}, ${currentSimData.repNacionality || '[nacionalidade]'}, ${currentSimData.repCivil || '[estado civil]'}, ${currentSimData.repJob || '[profissão]'}, inscrito no CPF nº ${currentSimData.documentId}, residente e domiciliado à ${currentSimData.repAddress || currentSimData.address}, doravante denominado simplesmente "COOPERADO".`;
-
-    const docDefinition = {
-        pageSize: 'A4',
-        pageMargins: [ 40, 100, 40, 40 ],
-        header: function(currentPage, pageCount, pageSize) {
-            return {
-                image: logoBase64,
-                width: 150,
-                alignment: 'center',
-                margin: [0, 15, 0, 0]
-            };
-        },
-        content: [
-            { text: "CONTRATO DE CESSÃO DO BENEFÍCIO ECONÔMICO DE CRÉDITOS DE ENERGIA ELÉTRICA", style: 'header', margin: [0, 10, 0, 5] },
-            { text: "NO ÂMBITO DO SISTEMA DE COMPENSAÇÃO DE ENERGIA ELÉTRICA (SCEE)", style: 'subheader', margin: [0, 0, 0, 20] },
-            
-            { text: "Pelo presente instrumento particular, as partes abaixo qualificadas:", margin: [0, 10, 0, 10] },
-            
-            { text: "I – COOPERATIVA (ADMINISTRADORA E GESTORA OPERACIONAL)", style: 'boldText' },
-            { text: "COOPSOL – COOPERATIVA DE GERAÇÃO DISTRIBUÍDA DE ENERGIA, pessoa jurídica de direito privado, constituída sob a forma de cooperativa, inscrita no CNPJ nº 33.923.055/0001-22, com sede à Rua Professora Arlinda Andrade, 667, Sagrada Família, Abaeté, CEP: 35.620-000, neste ato representada na forma de seu Estatuto Social, doravante denominada simplesmente \"COOPERATIVA\".", style: 'paragraph' },
-            
-            { text: "II – COOPERADO (UNIDADE CONSUMIDORA BENEFICIÁRIA)", style: 'boldText' },
-            { text: pjText, style: 'paragraph', margin: [0, 0, 0, 10] },
-            
-            { text: "CLÁUSULA PRIMEIRA – DO OBJETO", style: 'boldText' },
-            { text: "1.1. O presente contrato tem por objeto a cessão, pela COOPERATIVA ao COOPERADO, do benefício econômico decorrente da compensação de créditos de energia elétrica, no âmbito do Sistema de Compensação de Energia Elétrica – SCEE.", style: 'paragraph' },
-            { text: "1.2. Os créditos de energia elétrica são oriundos de ativos de geração distribuída vinculados à COOPERATIVA e/ou aos seus cooperados investidores, sendo sua gestão, alocação e compensação realizadas exclusivamente pela COOPERATIVA.", style: 'paragraph' },
-            { text: "1.3. As partes reconhecem que o presente instrumento não configura compra e venda de energia elétrica, tratando-se exclusivamente de cessão de benefício econômico no âmbito de ato cooperativo.", style: 'paragraph' },
-            
-            { text: "CLÁUSULA SEGUNDA – DA TITULARIDADE DOS ATIVOS", style: 'boldText' },
-            { text: "2.1. Os ativos de geração e as cotas-partes vinculadas pertencem à COOPERATIVA e/ou aos seus cooperados investidores, não sendo objeto de transferência ao COOPERADO.", style: 'paragraph' },
-            { text: "2.2. O COOPERADO fará jus exclusivamente ao benefício econômico da compensação de créditos, não adquirindo qualquer direito de propriedade, participação societária ou titularidade sobre os ativos.", style: 'paragraph' },
-            
-            { text: "CLÁUSULA TERCEIRA – DO PRAZO DE VIGÊNCIA", style: 'boldText' },
-            { text: "3.1. O presente contrato terá prazo de vigência de 12 (doze) meses, contados a partir da data de sua assinatura.", style: 'paragraph' },
-            { text: "3.2. O contrato será renovado automaticamente por iguais períodos, salvo manifestação contrária com antecedência mínima de 120 (cento e vinte) dias.", style: 'paragraph' },
-
-            { text: "CLÁUSULA QUARTA – DO BENEFÍCIO ECONÔMICO", style: 'boldText' },
-            { text: `4.1. O COOPERADO fará jus a um desconto de até ${currentSimData.discountPercent}% sobre a tarifa de energia elétrica da distribuidora, incidente sobre a parcela compensável.`, style: 'paragraph' },
-            { text: "4.2. O desconto não constitui garantia mínima, estando condicionado à geração efetiva, regras regulatórias, perfil de consumo e fatores tarifários.", style: 'paragraph' },
-
-            { text: "CLÁUSULA QUINTA – DO PREÇO E FORMA DE PAGAMENTO", style: 'boldText' },
-            { text: "5.1. O COOPERADO realizará o pagamento diretamente à COOPERATIVA, conforme o volume de energia efetivamente compensado.", style: 'paragraph' },
-            { text: "5.2. A COOPERATIVA será responsável por:\na) emissão de boletos, PIX ou outros meios de cobrança;\nb) emissão de documentos fiscais, quando aplicável;\nc) gestão financeira e administrativa;\nd) controle e cobrança de inadimplência.", style: 'paragraph' },
-            { text: "5.3. Em caso de atraso, incidirão:\na) multa de 2%;\nb) juros de 1% ao mês;\nc) correção monetária pelo IGP-M.", style: 'paragraph' },
-
-            { text: "CLÁUSULA SEXTA – DAS OBRIGAÇÕES DA COOPERATIVA", style: 'boldText' },
-            { text: "6.1. Compete à COOPERATIVA:\na) gerir os ativos de geração;\nb) realizar a alocação dos créditos;\nc) garantir a operacionalização junto à distribuidora;\nd) manter conformidade regulatória;\ne) prestar informações ao COOPERADO;\nf) realizar faturamento e cobrança.", style: 'paragraph' },
-
-            { text: "CLÁUSULA SÉTIMA – DAS OBRIGAÇÕES DO COOPERADO", style: 'boldText' },
-            { text: "7.1. Compete ao COOPERADO:\na) manter a unidade consumidora regular;\nb) efetuar os pagamentos nos prazos;\nc) fornecer informações necessárias;\nd) não interferir na operação do SCEE.", style: 'paragraph' },
-
-            { text: "CLÁUSULA OITAVA – DA SUSPENSÃO DO BENEFÍCIO", style: 'boldText' },
-            { text: "8.1. Em caso de inadimplência superior a 30 dias, a COOPERATIVA poderá suspender a alocação dos créditos, independentemente de aviso judicial.", style: 'paragraph' },
-
-            { text: "CLÁUSULA NONA – DA RESCISÃO", style: 'boldText' },
-            { text: "9.1. O contrato poderá ser rescindido por qualquer das partes mediante aviso prévio de 120 dias.", style: 'paragraph' },
-            { text: "9.2. A rescisão antecipada injustificada implicará multa equivalente a 3 meses da média de compensação.", style: 'paragraph' },
-            { text: "9.3. Alterações regulatórias que inviabilizem o contrato permitirão rescisão sem multa.", style: 'paragraph' },
-
-            { text: "CLÁUSULA DÉCIMA – DA CONFORMIDADE LEGAL", style: 'boldText' },
-            { text: "10.1. As partes declaram que o presente instrumento:\na) não configura comercialização de energia;\nb) atende à Lei 14.300/2022;\nc) caracteriza ato cooperativo;\nd) possui natureza privada.", style: 'paragraph' },
-
-            { text: "CLÁUSULA DÉCIMA PRIMEIRA – DA FICHA DE MATRÍCULA", style: 'boldText' },
-            { text: "11.1. A Ficha de Matrícula integra o presente contrato como Anexo I.", style: 'paragraph' },
-            { text: "11.2. Contém dados operacionais, rateio e condições comerciais.", style: 'paragraph' },
-            { text: "11.3. Poderá ser atualizada sem aditivo, desde que não altere condições essenciais.", style: 'paragraph' },
-
-            { text: "CLÁUSULA DÉCIMA SEGUNDA – DO FORO", style: 'boldText' },
-            { text: "Fica eleito o foro da Comarca de Belo Horizonte/MG.", style: 'paragraph' },
-
-            { text: "ASSINATURAS", style: 'boldText', alignment: 'center', margin: [0, 30, 0, 10] },
-            { text: `Belo Horizonte, ${dataFormatada}`, alignment: 'center', margin: [0, 0, 0, 30] },
-
-            { text: "_______________________________________________________", alignment: 'center' },
-            { text: "COOPERATIVA – COOPSOL", alignment: 'center' },
-            { text: "CNPJ: 33.923.055/0001-22", alignment: 'center' },
-            { text: "Assinatura: ______________________", alignment: 'center', margin: [0, 0, 0, 30] },
-
-            { text: "_______________________________________________________", alignment: 'center' },
-            { text: "COOPERADO", alignment: 'center' },
-            { text: currentSimData.name, alignment: 'center' },
-            { text: `${currentSimData.repClass === 'Pessoa Jurídica' ? 'CNPJ' : 'CPF'}: ${currentSimData.documentId}`, alignment: 'center' },
-            { text: "Assinatura: ______________________", alignment: 'center', margin: [0, 0, 0, 40] },
-
-            { text: "TESTEMUNHAS", style: 'boldText', alignment: 'center', margin: [0, 0, 0, 20] },
-            { text: "1. Nome: __________________ CPF: __________________", alignment: 'center', margin: [0, 0, 0, 20] },
-            { text: "2. Nome: __________________ CPF: __________________", alignment: 'center' },
-
-            // ANEXO I
-            { text: "ANEXO I – FICHA DE MATRÍCULA DO COOPERADO", style: 'header', pageBreak: 'before', margin: [0, 20, 0, 20] },
-            
-            { text: "1. IDENTIFICAÇÃO DA COOPERATIVA", style: 'boldText' },
-            { text: "Razão Social: COOPSOL\nCNPJ: 33.923.055/0001-22", style: 'paragraph' },
-
-            { text: "2. IDENTIFICAÇÃO DO COOPERADO", style: 'boldText' },
-            { text: `Razão Social / Nome: ${currentSimData.name}\n${currentSimData.repClass === 'Pessoa Jurídica' ? 'CNPJ' : 'CPF'}: ${currentSimData.documentId}`, style: 'paragraph' },
-
-            { text: "3. UNIDADES CONSUMIDORAS", style: 'boldText' },
-            {
-                table: {
-                    headerRows: 1,
-                    widths: ['auto', '*', 'auto', 'auto'],
-                    body: [
-                        [ {text: 'Nº UC / Instalação', bold: true}, {text: 'Endereço', bold: true}, {text: '% Rateio', bold: true}, {text: 'Consumo', bold: true} ],
-                        [ currentSimData.ucNumber || 'N/A', currentSimData.address, '100%', `${currentSimData.kwh} kWh` ]
-                    ]
-                },
-                margin: [0, 0, 0, 15]
-            },
-
-            { text: "4. CONDIÇÕES COMERCIAIS", style: 'boldText' },
-            { text: `• Desconto: ${currentSimData.discountPercent} %\n• Forma de pagamento: Boleto / PIX\n• Responsável pela cobrança: COOPERATIVA\n• Periodicidade: Mensal\n• Prazo: 12 meses com renovação automática`, style: 'paragraph' },
-
-            { text: "5. DECLARAÇÕES", style: 'boldText' },
-            { text: "✔ Não há compra de energia\n✔ Operação via SCEE\n✔ Aceite integral do contrato", style: 'paragraph' },
-
-            { text: "6. ASSINATURAS", style: 'boldText', margin: [0, 20, 0, 10] },
-            { text: "COOPERATIVA: ___________________________\n\nCOOPERADO: ___________________________", style: 'paragraph', margin: [0, 0, 0, 30] }
-        ],
-        styles: {
-            header: { fontSize: 13, bold: true, alignment: 'center', margin: [0, 0, 0, 5] },
-            subheader: { fontSize: 11, bold: true, alignment: 'center', margin: [0, 0, 0, 20] },
-            boldText: { fontSize: 10, bold: true, margin: [0, 10, 0, 5] },
-            paragraph: { fontSize: 10, alignment: 'justify', margin: [0, 0, 0, 5] }
-        }
-    };
-
-    pdfMake.createPdf(docDefinition).download(`Contrato_CoopSol_${currentSimData.name.replace(/\s+/g, '')}.pdf`);
-    
-    // Salva o cliente como Fechado após emitir
-    await saveClient('Fechado');
-    navigate('dashboard');
-};
 
 
 window.updateSimSavings = () => {
@@ -1874,6 +1779,32 @@ const ViewAnalytics = async () => {
         </div>
     </div>`;
 };
+
+// ---- POLLING DE WEBHOOK AUTENTIQUE ----
+// Verifica a cada 60s se algum contrato foi assinado via webhook
+async function pollWebhookEvents() {
+    if (!currentUser) return;
+    try {
+        const res = await fetch('/api/webhook-events');
+        const data = await res.json();
+        if (data.ok && data.events && data.events.length > 0) {
+            for (const evt of data.events) {
+                const docId = evt.documentId;
+                // Busca o cliente com esse autentiqueDocId
+                const allClients = await getClientsData();
+                const client = allClients.find(c => c.autentiqueDocId === docId);
+                if (client && evt.event === 'document_signed') {
+                    await db.saveClient({ id: client.id, contractStatus: 'Assinado', contractSignedAt: new Date().toISOString() });
+                    invalidateCaches();
+                    console.log(`[Webhook] Contrato de ${client.name} marcado como Assinado.`);
+                }
+            }
+        }
+    } catch(e) {
+        // Silencioso — não interrompe o usuário
+    }
+}
+setInterval(pollWebhookEvents, 60000);
 
 // Start App
 if(currentUser) navigate('dashboard');

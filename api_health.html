@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnóstico de API - Coopsol</title>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .card { background: rgba(30, 41, 59, 0.7); padding: 2rem; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); width: 100%; max-width: 500px; text-align: center; }
+        h1 { color: #00c93b; margin-bottom: 1.5rem; }
+        .status-item { display: flex; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .status-badge { padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: bold; font-size: 0.8rem; }
+        .ok { background: #059669; color: white; }
+        .err { background: #dc2626; color: white; }
+        pre { text-align: left; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; font-size: 0.8rem; overflow-x: auto; color: #94a3b8; }
+        .btn { display: inline-block; margin-top: 2rem; padding: 0.8rem 1.5rem; background: #009e2f; color: white; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🏥 Check-up Coopsol CRM</h1>
+        <p>Verificando conexão com o servidor e Autentique...</p>
+        
+        <div id="results">Carregando...</div>
+        
+        <a href="/" class="btn">Voltar para o CRM</a>
+    </div>
+
+    <script>
+        async function runCheck() {
+            const results = document.getElementById('results');
+            try {
+                const start = Date.now();
+                const response = await fetch('/api/diagnostico');
+                const data = await response.json();
+                const ping = Date.now() - start;
+
+                results.innerHTML = `
+                    <div class="status-item">
+                        <span>Servidor Node.js</span>
+                        <span class="status-badge ${data.servidor === 'OK' ? 'ok' : 'err'}">${data.servidor}</span>
+                    </div>
+                    <div class="status-item">
+                        <span>Token no .env</span>
+                        <span class="status-badge ${data.token_configurado ? 'ok' : 'err'}">${data.token_configurado ? 'CONFIGURADO' : 'FALTANDO'}</span>
+                    </div>
+                    <div class="status-item">
+                        <span>API Autentique (v2)</span>
+                        <span class="status-badge ${data.autentique_api === 'OK' ? 'ok' : 'err'}">${data.autentique_api}</span>
+                    </div>
+                    <div class="status-item">
+                        <span>Latência (Ping)</span>
+                        <span style="color: #94a3b8;">${ping}ms</span>
+                    </div>
+                    ${data.erro ? `<h4 style="color:#ef4444; margin-top:1.5rem;">Log de Erro:</h4><pre>${data.erro}</pre>` : ''}
+                    ${data.usuario_autentique ? `<h4 style="color:#10b981; margin-top:1.5rem;">Conectado como:</h4><pre>${JSON.stringify(data.usuario_autentique, null, 2)}</pre>` : ''}
+                `;
+            } catch (e) {
+                results.innerHTML = `
+                    <div class="status-badge err" style="display:block; margin: 1rem 0;">SERVIDOR OFFLINE</div>
+                    <p style="color: #94a3b8; font-size: 0.9rem;">O navegador não conseguiu falar com o Node no endereço: ${window.location.origin}</p>
+                    <pre>Dica: Verifique se você abriu o terminal e rodou 'node server.js' ou o arquivo 'start_server.bat'.</pre>
+                `;
+            }
+        }
+        runCheck();
+    </script>
+</body>
+</html>

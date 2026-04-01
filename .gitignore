@@ -1,0 +1,14 @@
+# Dependências Node.js
+node_modules/
+
+# Variáveis de ambiente (contém tokens/senhas - NUNCA commitar)
+.env
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
