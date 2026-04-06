@@ -873,6 +873,7 @@ const ViewSimulation = async (client = null) => {
             </div>
             ` : ''}
             <form id="sim-form" onsubmit="handleSimulation(event, ${client ? client.id : 'null'})">
+                <input type="hidden" id="sim-edit-discount" value="${client && client.discountPercent !== undefined ? client.discountPercent : ''}">
                 <div style="display: flex; gap: 1rem; width: 100%;">
                     <div class="input-group" style="flex: 2;">
                         <label>Titular da Unidade Consumidora</label>
@@ -1160,7 +1161,17 @@ window.handleSimulation = async (e, editId = null) => {
     let energiaCompensavel = Math.max(0, kwh - taxaDisp);
     
     let eligible = true;
-    let discount = kwh > 500 ? 25 : 20;
+    let suggestedDiscount = kwh > 500 ? 25 : 20;
+    
+    let existingDiscount = '';
+    if (window.currentSimData && window.currentSimData.discountPercent !== undefined) {
+        existingDiscount = window.currentSimData.discountPercent;
+    } else {
+        const hc = document.getElementById('sim-edit-discount');
+        if (hc && hc.value !== '') existingDiscount = parseFloat(hc.value);
+    }
+    
+    let discount = (existingDiscount !== '' && !isNaN(existingDiscount)) ? parseFloat(existingDiscount) : suggestedDiscount;
     
     const coopBill = energiaCompensavel * (1 - (discount / 100)) * kwhPrice;
     const utilityBill = (taxaDisp * kwhPrice) + publicLight;
@@ -1216,7 +1227,7 @@ window.handleSimulation = async (e, editId = null) => {
             <div class="input-group" style="margin-top: 1.5rem; margin-bottom: 1.5rem; max-width: 250px; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">
                 <label>Alterar Desconto (%)</label>
                 <input type="number" id="custom-discount" step="0.5" min="0" max="100" value="${discount}" oninput="updateSimSavings()" style="font-size: 1.1rem; font-weight: bold; color: var(--accent-yellow);">
-                <small style="color: var(--text-muted); font-size: 0.8rem; margin-top: 0.2rem;">*Sugerido pelo sistema: ${discount}%</small>
+                <small style="color: var(--text-muted); font-size: 0.8rem; margin-top: 0.2rem;">*Sugerido pelo sistema: ${suggestedDiscount}%</small>
             </div>
 
             <div class="result-actions">
