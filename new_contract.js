@@ -159,11 +159,14 @@ window.closeContract = async () => {
         const filename = `Contrato_CoopSol_${currentSimData.name.replace(/\s+/g, '')}.pdf`;
         const autentiqueDocId = await sendToAutentique(pdfBlob, filename, currentSimData.email);
 
+        let finalStatus = 'Fechado';
         if (autentiqueDocId) {
+            finalStatus = 'Aguardando assinatura';
             // Salva o ID do documento Autentique e atualiza status no Firebase
             await firestore.collection('clients').doc(String(currentSimData.id)).update({
                 autentiqueDocId: autentiqueDocId,
-                contractStatus: 'Aguardando assinatura',
+                status: finalStatus,
+                contractStatus: finalStatus,
                 contractSentAt: new Date().toISOString()
             });
             invalidateCaches();
@@ -171,6 +174,10 @@ window.closeContract = async () => {
         } else {
             alert('O contrato foi baixado, mas houve um erro ao enviar para o Autentique. Por favor, envie manualmente.');
         }
+
+        // Finaliza salvando o estado completo do cliente
+        await saveClient(finalStatus);
+        navigate('dashboard');
     } catch (e) {
         console.error("Erro Autentique:", e);
         alert('Erro ao processar envio para Autentique: ' + e.message);
@@ -178,10 +185,6 @@ window.closeContract = async () => {
         const loader = document.getElementById('autentique-loader');
         if(loader) loader.remove();
     }
-    
-    // Salva o cliente como Fechado após emitir
-    await saveClient('Fechado');
-    navigate('dashboard');
 };
 
 async function sendToAutentique(pdfBlob, filename, clientEmail) {

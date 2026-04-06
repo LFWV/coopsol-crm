@@ -153,6 +153,18 @@ const db = {
     }
 };
 
+// ---- ADMIN ACCESS ----
+const ADMIN_EMAILS = [
+    'vinicius@coopsol.com',
+    'luisvalgas@coopsol.com',
+    'taise@coopsol.com'
+];
+
+function isUserAdmin(user) {
+    if (!user || !user.email) return false;
+    return ADMIN_EMAILS.includes(user.email.toLowerCase());
+}
+
 // ---- AUTH STATE ----
 let currentUser = JSON.parse(localStorage.getItem('crm_current_user')) || null;
 let currentFilters = { search: '', status: 'all', sellerId: 'all' };
@@ -212,9 +224,15 @@ window.checkContractStatus = async (clientId, autentiqueDocId) => {
         }
 
         const newStatus = data.status;
+        const update = { id: clientId, contractStatus: newStatus };
+        
+        // Se assinado, atualiza status principal também
+        if (newStatus === 'Assinado') {
+            update.status = 'Assinado';
+            update.contractSignedAt = new Date().toISOString();
+        }
 
-        // Atualiza no Firebase se status mudou
-        await db.saveClient({ id: clientId, contractStatus: newStatus, ...(newStatus === 'Assinado' ? { contractSignedAt: new Date().toISOString() } : {}) });
+        await db.saveClient(update);
         invalidateCaches();
 
         // Atualiza badge na tela
@@ -232,6 +250,52 @@ window.checkContractStatus = async (clientId, autentiqueDocId) => {
     } catch(e) {
         alert('Erro de conexão ao verificar status: ' + e.message);
     }
+};
+
+window.syncAllAwaitingContracts = async () => {
+    const allClients = await getClientsData();
+    // Filtra clientes que estão aguardando assinatura (status principal ou status contrato)
+    const pending = allClients.filter(c => c.autentiqueDocId && c.contractStatus !== 'Assinado' && c.contractStatus !== 'Recusado');
+    
+    if (pending.length === 0) {
+        alert('Nenhum contrato aguardando assinatura com ID do Autentique encontrado.');
+        return;
+    }
+
+    const btn = event.currentTarget;
+    const oldText = btn.innerHTML;
+    btn.innerHTML = '⏳ Sincronizando...';
+    btn.disabled = true;
+
+    let successCount = 0;
+    for (const c of pending) {
+        try {
+            const res = await fetch(`/api/status-contrato/${c.autentiqueDocId}`);
+            const data = await res.json();
+            if (data.ok && data.status) {
+                const newStatus = data.status;
+                const update = { id: c.id, contractStatus: newStatus };
+                
+                if (newStatus === 'Assinado') {
+                    update.status = 'Assinado';
+                    update.contractSignedAt = new Date().toISOString();
+                } else if (newStatus === 'Aguardando assinatura') {
+                    update.status = 'Aguardando assinatura';
+                }
+
+                await db.saveClient(update);
+                successCount++;
+            }
+        } catch (e) {
+            console.error(`Erro ao sincronizar cliente ${c.id}:`, e);
+        }
+    }
+
+    invalidateCaches();
+    btn.innerHTML = oldText;
+    btn.disabled = false;
+    alert(`Sincronização concluída! ${successCount} cliente(s) processado(s).`);
+    navigate('clients');
 };
 
 // ---- THEME ----
@@ -364,7 +428,7 @@ const ViewRegister = () => `
 </div>`;
 
 const Sidebar = (active) => {
-    const isAdmin = currentUser && (currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com');
+    const isAdmin = isUserAdmin(currentUser);
     return `
 <div class="sidebar" id="app-sidebar">
     <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center;">
@@ -399,7 +463,7 @@ const Sidebar = (active) => {
 };
 
 const ViewDashboard = async () => {
-    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    const isAdmin = isUserAdmin(currentUser);
     const allClients = await db.getClients();
     const users = isAdmin ? await db.getUsers() : [];
     
@@ -411,19 +475,32 @@ const ViewDashboard = async () => {
     let adminUsersTable = '';
     if(isAdmin) {
         const userRows = users.map(u => {
-            const isAdminAcc = u.email === 'vinicius@coopsol.com' || u.email === 'luisvalgas@coopsol.com';
+            const isAdminAcc = isUserAdmin(u);
             const isActive = (u.status || 'Ativo') !== 'Negado';
-            
+            const hasRec = u.hasRecurrence !== false;
+
+            let recurrenceBtn = '';
+            if (!isAdminAcc) {
+                recurrenceBtn = `<button id="btn-rec-${u.id}" onclick="toggleSellerRecurrence('${u.id}', ${!hasRec})" style="
+                    padding: 0.3rem 0.8rem; font-size: 0.75rem; border-radius: 20px; cursor: pointer;
+                    font-weight: 600; border: 2px solid ${hasRec ? '#10b981' : '#64748b'};
+                    background: ${hasRec ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.10)'};
+                    color: ${hasRec ? '#10b981' : '#94a3b8'};
+                ">${hasRec ? '✅ Com Recorrência' : '❌ Sem Recorrência'}</button>`;
+            } else {
+                recurrenceBtn = `<span style="font-size:0.75rem; color:var(--text-muted);">—</span>`;
+            }
+
             let actionBtn = '';
-            if(!isAdminAcc) {
-                actionBtn = `
-                <div style="display:flex; gap:0.5rem;">
-                    ${isActive ? `<button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.3);" onclick="toggleUserStatus('${u.id}', 'Negado')">Bloquear</button>` 
-                               : `<button class="btn btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="toggleUserStatus('${u.id}', 'Ativo')">Ativar</button>`}
-                    <button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.3);" onclick="handleDeleteUser('${u.id}', '${u.name}')">Excluir</button>
+            if (!isAdminAcc) {
+                actionBtn = `<div style="display:flex; gap:0.5rem;">
+                    ${isActive
+                        ? `<button class="btn btn-outline" style="padding:0.3rem 0.6rem;font-size:0.75rem;color:var(--danger);border-color:rgba(239,68,68,0.3);" onclick="toggleUserStatus('${u.id}','Negado')">Bloquear</button>`
+                        : `<button class="btn btn-primary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="toggleUserStatus('${u.id}','Ativo')">Ativar</button>`}
+                    <button class="btn btn-outline" style="padding:0.3rem 0.6rem;font-size:0.75rem;color:var(--danger);border-color:rgba(239,68,68,0.3);" onclick="handleDeleteUser('${u.id}','${u.name}')">Excluir</button>
                 </div>`;
             } else {
-                actionBtn = `<span style="font-size: 0.8rem; color: var(--text-muted);">Admin</span>`;
+                actionBtn = `<span style="font-size:0.8rem;color:var(--text-muted);">Admin</span>`;
             }
 
             return `
@@ -431,24 +508,28 @@ const ViewDashboard = async () => {
                 <td><strong>${u.name}</strong></td>
                 <td>${u.email}</td>
                 <td><span class="status-badge ${!isActive ? 'status-perdida' : 'status-fechado'}">${u.status || 'Ativo'}</span></td>
+                <td>${recurrenceBtn}</td>
                 <td>${actionBtn}</td>
-            </tr>
-            `;
+            </tr>`;
         }).join('');
         
         adminUsersTable = `
             <div class="table-container glass" style="margin-top: 2rem;">
-                <h3>Vendedores Registrados (Visão Admin)</h3>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+                    <h3 style="margin:0;">Vendedores Registrados</h3>
+                    <small style="color:var(--text-muted); font-size:0.8rem;">Recorrência = 5% mensal por cliente &middot; Sem recorrência = empresa fica com 10% de taxa admin</small>
+                </div>
                 <table class="client-list">
                     <thead>
                         <tr>
                             <th>Nome</th>
                             <th>E-mail</th>
                             <th>Status de Acesso</th>
+                            <th>Recorrência</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
-                    <tbody>${userRows || '<tr><td colspan="4" style="text-align:center;">Nenhum usuário</td></tr>'}</tbody>
+                    <tbody>${userRows || '<tr><td colspan="5" style="text-align:center;">Nenhum usuário</td></tr>'}</tbody>
                 </table>
             </div>
         `;
@@ -479,7 +560,7 @@ const ViewDashboard = async () => {
 };
 
 const ViewSettings = async () => {
-    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    const isAdmin = isUserAdmin(currentUser);
     if(!isAdmin) return navigate('dashboard');
 
     let globalPrice = 0.95;
@@ -554,7 +635,7 @@ const renderClientRows = (filtered, isAdmin, users) => {
 };
 
 const ViewClients = async () => {
-    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    const isAdmin = isUserAdmin(currentUser);
     const allClients = await getClientsData();
     const users = isAdmin ? await getUsersData() : [];
 
@@ -589,7 +670,10 @@ const ViewClients = async () => {
         <div class="main-content">
             <div class="header">
                 <h2>Gestão de Clientes</h2>
-                <button class="btn btn-primary" onclick="navigate('simulation')">+ Novo Contrato</button>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-outline" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick="syncAllAwaitingContracts(event)">🔄 Sincronizar Autentique</button>
+                    <button class="btn btn-primary" onclick="navigate('simulation')">+ Novo Contrato</button>
+                </div>
             </div>
 
             <div class="table-container glass" style="margin-bottom: 2rem; padding: 1.5rem;">
@@ -603,6 +687,8 @@ const ViewClients = async () => {
                         <select id="filter-status" onchange="updateDashboardFilters(document.getElementById('filter-search').value, this.value, ${isAdmin ? "document.getElementById('filter-seller').value" : "'all'"})" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); font-size: 0.85rem; border-radius: 6px; padding: 0.4rem;">
                             <option value="all" ${status === 'all' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Todos os Status</option>
                             <option value="Em Negociação" ${status === 'Em Negociação' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Em Negociação</option>
+                            <option value="Aguardando assinatura" ${status === 'Aguardando assinatura' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Aguardando Assinatura</option>
+                            <option value="Assinado" ${status === 'Assinado' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Assinado</option>
                             <option value="Fechado" ${status === 'Fechado' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Fechado</option>
                             <option value="Perdida" ${status === 'Perdida' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Perdida</option>
                         </select>
@@ -641,7 +727,7 @@ const ViewClients = async () => {
 // ViewGallery removed
 
 const ViewCommissions = async () => {
-    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    const isAdmin = isUserAdmin(currentUser);
     const allClients = await db.getClients();
     const users = await db.getUsers();
 
@@ -738,7 +824,7 @@ const ViewCommissions = async () => {
 };
 
 const ViewSimulation = async (client = null) => {
-    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    const isAdmin = isUserAdmin(currentUser);
     let users = isAdmin ? await db.getUsers() : [];
     users.sort((a,b) => (a.name || '').localeCompare(b.name || ''));
 
@@ -932,7 +1018,7 @@ window.ViewQuickSim = () => {
                         <input type="number" id="qsim-light" step="0.01" min="0" required placeholder="Ex: 25.50">
                     </div>
                 </div>
-                <button type="submit" class="btn btn-outline" style="width: 100%; margin-top: 1rem; background: rgba(16, 185, 129, 0.1); color: white; border-color: var(--accent-green);">Calcular Economia</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem; background-color: var(--accent-green); border-color: var(--accent-green); color: white; font-weight: bold; font-size: 1.1rem; padding: 0.8rem;">Calcular Economia</button>
             </form>
 
             <div id="quick-result-box" class="result-card"></div>
@@ -1234,7 +1320,7 @@ window.viewClientDetails = async (id) => {
 };
 
 const ViewClientDetailsOnly = async (client) => {
-    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    const isAdmin = isUserAdmin(currentUser);
     let users = isAdmin ? await db.getUsers() : [];
     users.sort((a,b) => (a.name || '').localeCompare(b.name || ''));
     const currentSeller = users.find(u => String(u.id) === String(client.sellerId));
@@ -1454,7 +1540,7 @@ window.updateGlobalKwhPrice = async () => {
 window.updateDashboardFilters = async (search, status, sellerId) => {
     currentFilters = { search, status, sellerId };
 
-    const isAdmin = currentUser.email === 'vinicius@coopsol.com' || currentUser.email === 'luisvalgas@coopsol.com';
+    const isAdmin = isUserAdmin(currentUser);
     
     // Pega dados do cache (quase instantâneo)
     const allClients = await getClientsData();
@@ -1495,6 +1581,31 @@ window.updateCommissionFilter = (vendedorId) => {
 window.toggleAnalyticsUnit = () => {
     analyticsUnit = analyticsUnit === 'kWh' ? 'BRL' : 'kWh';
     navigate('analytics');
+};
+
+window.toggleSellerRecurrence = async (sellerId, newHasRecurrence) => {
+    try {
+        const btn = document.getElementById('btn-rec-' + sellerId);
+        if (btn) btn.innerHTML = 'Salvando...';
+
+        const users = await db.getUsers();
+        const user = users.find(u => String(u.id) === String(sellerId));
+        if (!user) return alert('Vendedor não encontrado.');
+        user.hasRecurrence = newHasRecurrence;
+        await db.saveUser(user);
+        invalidateCaches();
+
+        if (btn) {
+            const hasRec = newHasRecurrence;
+            btn.innerHTML = hasRec ? '✅ Com Recorrência' : '❌ Sem Recorrência';
+            btn.style.borderColor = hasRec ? '#10b981' : '#64748b';
+            btn.style.background = hasRec ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.10)';
+            btn.style.color = hasRec ? '#10b981' : '#94a3b8';
+            btn.setAttribute('onclick', `toggleSellerRecurrence('${sellerId}', ${!hasRec})`);
+        }
+    } catch(e) {
+        alert('Erro ao atualizar configuração de recorrência: ' + e.message);
+    }
 };
 
 window.updateContractStatus = async (id, status) => {
@@ -1637,6 +1748,134 @@ const ViewAnalytics = async () => {
     const valNeg = totalKwhNeg * factor;
     const valLost = totalKwhLost * factor;
 
+    // ==========================================
+    // ANÁLISE DE DESCONTOS
+    // ==========================================
+    const allActiveDiscounts = clients.filter(c => c.status !== 'Perdida' && c.status !== 'Desativado' && c.discountPercent);
+    const discountBucketsSold = {};
+    const discountKwhBucketsSold = {};
+    const discountBucketsNeg = {};
+    const discountKwhBucketsNeg = {};
+
+    // Coletar todos os descontos únicos dinamicamente para acabar com o grupo "Outros"
+    const uniqueDiscounts = new Set();
+    allActiveDiscounts.forEach(c => {
+        const d = parseFloat(c.discountPercent) || 0;
+        if (d > 0) uniqueDiscounts.add(d);
+    });
+
+    const sortedDiscounts = Array.from(uniqueDiscounts).sort((a, b) => a - b);
+    sortedDiscounts.forEach(d => {
+        const label = d + '%';
+        discountBucketsSold[label] = 0;
+        discountKwhBucketsSold[label] = 0;
+        discountBucketsNeg[label] = 0;
+        discountKwhBucketsNeg[label] = 0;
+    });
+
+    let totalEconomiaNegociando = 0;
+
+    allActiveDiscounts.forEach(c => {
+        const d = parseFloat(c.discountPercent) || 0;
+        const cKwh = parseFloat(c.kwh) || 0;
+        const isSold = (c.status === 'Fechado' || c.status === 'Convertido');
+        const isNeg = (c.status === 'Em negociação' || c.status === 'Em Negociação' || c.status === 'Lead');
+        
+        if (isNeg) {
+            totalEconomiaNegociando += (parseFloat(c.savings) || 0);
+        }
+
+        if (d > 0) {
+            const label = d + '%';
+            if (isSold) {
+                discountBucketsSold[label]++; 
+                discountKwhBucketsSold[label] += cKwh; 
+            } else if (isNeg) {
+                discountBucketsNeg[label]++; 
+                discountKwhBucketsNeg[label] += cKwh; 
+            }
+        }
+    });
+
+    // ==========================================
+    // ANÁLISE DE LUCRO
+    // Com recorrência: Lucro = Receita Líquida - Custo Usineiro (55%) - Recorrência Vendedor (5% fatura)
+    // Sem recorrência: Empresa fica com apenas 10% da receita bruta (taxa administrativa)
+    // ==========================================
+    let totalReceitaBruta = 0;
+    let totalCustoUsineiro = 0;
+    let totalCustoVendedor = 0;
+    let totalDescontoCliente = 0;
+    let totalLucro = 0;
+
+    const profitRows = closedClients.map(c => {
+        const kwh = parseFloat(c.kwh) || 0;
+        const kwhPriceClient = parseFloat(c.kwhPrice) || factor;
+        const discountPercent = parseFloat(c.discountPercent) || 0;
+        let taxaDisp = 30;
+        if (c.supplyClass === 'Bifasico' || c.supplyClass === 'Bifásico') taxaDisp = 50;
+        if (c.supplyClass === 'Trifasico' || c.supplyClass === 'Trifásico') taxaDisp = 100;
+        const energiaComp = parseFloat(c.energiaCompensavel) || Math.max(0, kwh - taxaDisp);
+        const bill = parseFloat(c.billValue) || 0;
+        const savings = parseFloat(c.savings) || 0;
+
+        const seller = users.find(u => String(u.id) === String(c.sellerId));
+        const sellerName = seller?.name || 'Desconhecido';
+        const sellerHasRecurrence = seller?.hasRecurrence !== false;
+
+        const receitaBruta = energiaComp * kwhPriceClient;
+        const receitaLiquida = receitaBruta * (1 - discountPercent / 100);
+        const custoUsineiro = receitaBruta * 0.55;
+        const descontoCliente = savings;
+
+        let custoVendedor = 0;
+        let lucro = 0;
+        let modeloLabel = '';
+
+        if (sellerHasRecurrence) {
+            // Modelo padrão: paga 5% de recorrência ao vendedor
+            custoVendedor = bill * 0.05;
+            lucro = receitaLiquida - custoUsineiro - custoVendedor;
+            modeloLabel = '5% rec.';
+        } else {
+            // Modelo sem recorrência: empresa fica com 10% da receita bruta (taxa admin)
+            custoVendedor = 0;
+            lucro = receitaBruta * 0.10;
+            modeloLabel = '10% adm.';
+        }
+
+        totalReceitaBruta += receitaLiquida;
+        totalCustoUsineiro += custoUsineiro;
+        totalCustoVendedor += custoVendedor;
+        totalDescontoCliente += descontoCliente;
+        totalLucro += lucro;
+
+        const lucroColor = lucro >= 0 ? '#10b981' : '#ef4444';
+        const modeloBadge = sellerHasRecurrence
+            ? `<span style="font-size:0.65rem;background:rgba(167,139,250,0.15);color:#a78bfa;padding:0.1rem 0.4rem;border-radius:8px;">REC</span>`
+            : `<span style="font-size:0.65rem;background:rgba(245,158,11,0.15);color:#f59e0b;padding:0.1rem 0.4rem;border-radius:8px;">ADM 10%</span>`;
+
+        return `
+        <tr>
+            <td>
+                <strong>${c.name}</strong>
+                <br><small style="color:var(--text-muted)">${sellerName} ${modeloBadge} · Desc: ${discountPercent}%</small>
+            </td>
+            <td style="text-align:right">${energiaComp.toLocaleString('pt-BR')} kWh</td>
+            <td style="text-align:right; color: #10b981; font-weight:600">${formatCurrency(receitaLiquida)}<br><small style="color:var(--text-muted)">(desc. ${discountPercent}%)</small></td>
+            <td style="text-align:right; color: #f59e0b">${formatCurrency(custoUsineiro)}<br><small>55% bruto</small></td>
+            <td style="text-align:right; color: #a78bfa">${custoVendedor > 0 ? formatCurrency(custoVendedor) : '—'}<br><small>${modeloLabel}</small></td>
+            <td style="text-align:right; color: #64748b">${formatCurrency(descontoCliente)}</td>
+            <td style="text-align:right; font-weight:800; font-size:1rem; color:${lucroColor}">${formatCurrency(lucro)}</td>
+        </tr>`;
+    }).join('');
+
+    // Margem calculada sobre a receita líquida (já com desconto aplicado)
+    const margemLiquida = totalReceitaBruta > 0 ? (totalLucro / totalReceitaBruta) * 100 : 0;
+    
+    // Receita Teórica = O valor bruto "cheio" caso todo o desconto nunca fosse dado. Usado para a roda de composição total.
+    const receitaTeorica = totalReceitaBruta + totalDescontoCliente;
+
     // Dados por Vendedor
     const sellerPerformance = users.map(u => {
         const soldKwh = clients.filter(c => String(c.sellerId) === String(u.id) && (c.status === 'Fechado' || c.status === 'Convertido'))
@@ -1721,6 +1960,93 @@ const ViewAnalytics = async () => {
             },
             options: { responsive: true, cutout: '70%' }
         });
+
+        // Grafico 4: Composicao do Lucro
+        const ctx4El = document.getElementById('profitChart');
+        if (ctx4El) {
+            const ctx4 = ctx4El.getContext('2d');
+            new Chart(ctx4, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Lucro Liquido', 'Custo Usineiro', 'Rec. Vendedor', 'Desconto Cliente'],
+                    datasets: [{
+                        data: [Math.max(0, totalLucro), totalCustoUsineiro, totalCustoVendedor, totalDescontoCliente],
+                        backgroundColor: ['#10b981', '#f59e0b', '#a78bfa', '#64748b'],
+                        borderWidth: 2,
+                        borderColor: 'rgba(255,255,255,0.08)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    cutout: '65%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 12, font: { size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => ` ${ctx.label}: R$ ${ctx.raw.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Grafico 5: Distribuicao de Descontos
+        const ctx5El = document.getElementById('discountChart');
+        if (ctx5El) {
+            const ctx5 = ctx5El.getContext('2d');
+            new Chart(ctx5, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(discountBucketsSold),
+                    datasets: [
+                        { label: 'Vendido', data: Object.values(discountBucketsSold), backgroundColor: '#3b82f6', borderRadius: 4 },
+                        { label: 'Em Negociação', data: Object.values(discountBucketsNeg), backgroundColor: '#f59e0b', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+                    },
+                    plugins: {
+                        legend: { display: true }
+                    }
+                }
+            });
+        }
+
+        // Grafico 6: Volume (kWh) por Desconto
+        const ctx6El = document.getElementById('discountKwhChart');
+        if (ctx6El) {
+            const ctx6 = ctx6El.getContext('2d');
+            new Chart(ctx6, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(discountKwhBucketsSold),
+                    datasets: [
+                        { label: 'Vendido', data: Object.values(discountKwhBucketsSold), backgroundColor: '#8b5cf6', borderRadius: 4 },
+                        { label: 'Em Negociação', data: Object.values(discountKwhBucketsNeg), backgroundColor: '#f59e0b', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => ` ${ctx.label}: ${ctx.raw.toLocaleString('pt-BR')} kWh`
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }, 100);
 
     return `
@@ -1775,6 +2101,165 @@ const ViewAnalytics = async () => {
                     <div style="font-size:2.5rem; font-weight:800; color:var(--accent-yellow);">${analyticsUnit === 'kWh' ? totalKwhNeg.toLocaleString() + ' kWh' : formatCurrency(valNeg)}</div>
                     <p style="color:var(--text-muted); margin-top:0.5rem;">Existem ${negClients.length} leads ativos que podem gerar este volume.</p>
                 </div>
+            </div>
+
+            <!-- ===== SECAO ANALISE DE DESCONTOS ===== -->
+            <div style="margin-top: 2.5rem;">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--panel-border);">
+                    <div style="width: 4px; height: 36px; background: linear-gradient(to bottom, #3b82f6, #2563eb); border-radius: 2px; flex-shrink:0;"></div>
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.4rem;">📉 Análise de Descontos </h2>
+                        <p style="color: var(--text-muted); font-size: 0.82rem; margin: 0.2rem 0 0;">Distribuição dos descontos aplicados nos contratos ativos e economia gerada.</p>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                    <div class="stat-card glass" style="border-left: 3px solid #3b82f6;">
+                        <span class="label">Desconto Médio (Vendido)</span>
+                        <span class="value" style="color: #3b82f6; font-size: 1.8rem;">${(receitaTeorica > 0 ? (totalDescontoCliente / receitaTeorica) * 100 : 0).toFixed(1)}%</span>
+                        <small style="color: var(--text-muted);">Eqv. Financeiro q incide no Lucro</small>
+                    </div>
+                    <div class="stat-card glass" style="border-left: 3px solid #f59e0b;">
+                        <span class="label">Projeção R$ (Em Negociação)</span>
+                        <span class="value" style="color: #f59e0b; font-size: 1.8rem;">${formatCurrency(totalEconomiaNegociando)}</span>
+                        <small style="color: var(--text-muted);">Descontos que podem ser fechados</small>
+                    </div>
+                    <div class="stat-card glass" style="border-left: 3px solid #64748b;">
+                        <span class="label">R$ Economizado (Vendido)</span>
+                        <span class="value" style="color: #64748b; font-size: 1.8rem;">${formatCurrency(totalDescontoCliente)}</span>
+                        <small style="color: var(--text-muted);">Entregue aos clientes fechados</small>
+                    </div>
+                    <div class="stat-card glass" style="border-left: 3px solid #ef4444;">
+                        <span class="label">Impacto no Faturamento</span>
+                        <span class="value" style="color: #ef4444; font-size: 1.8rem;">${formatCurrency(totalDescontoCliente)}</span>
+                        <small style="color: var(--text-muted);">Dinheiro "deixado na mesa" hoje</small>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                    <div class="table-container glass">
+                        <h3 style="font-size: 1rem; margin-bottom: 1rem;">Distribuição de Descontos (Clientes)</h3>
+                        <canvas id="discountChart" height="200"></canvas>
+                    </div>
+                    <div class="table-container glass">
+                        <h3 style="font-size: 1rem; margin-bottom: 1rem;">Volume Comprometido (kWh)</h3>
+                        <canvas id="discountKwhChart" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== SECAO ANALISE DE LUCRO ===== -->
+            <div style="margin-top: 2.5rem;">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--panel-border);">
+                    <div style="width: 4px; height: 36px; background: linear-gradient(to bottom, #10b981, #059669); border-radius: 2px; flex-shrink:0;"></div>
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.4rem;">💰 Análise de Lucro</h2>
+                        <p style="color: var(--text-muted); font-size: 0.82rem; margin: 0.2rem 0 0;">Composição financeira dos contratos fechados &middot; Usineiro 55% &middot; Recorrência Vendedor 5%</p>
+                    </div>
+                </div>
+
+                <!-- KPI Cards de lucro -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                    <div class="stat-card glass" style="border-left: 3px solid #10b981;">
+                        <span class="label">💵 Receita Líquida</span>
+                        <span class="value" style="color: #10b981; font-size: 1.5rem;">${formatCurrency(totalReceitaBruta)}</span>
+                        <small style="color: var(--text-muted);">kWh comp. × preço com desconto</small>
+                    </div>
+                    <div class="stat-card glass" style="border-left: 3px solid #f59e0b;">
+                        <span class="label">⚡ Custo Usineiro</span>
+                        <span class="value" style="color: #f59e0b; font-size: 1.5rem;">${formatCurrency(totalCustoUsineiro)}</span>
+                        <small style="color: var(--text-muted);">55% às geradoras</small>
+                    </div>
+                    <div class="stat-card glass" style="border-left: 3px solid #a78bfa;">
+                        <span class="label">🤝 Rec. Vendedores</span>
+                        <span class="value" style="color: #a78bfa; font-size: 1.5rem;">${formatCurrency(totalCustoVendedor)}</span>
+                        <small style="color: var(--text-muted);">5% mensal por cliente</small>
+                    </div>
+                    <div class="stat-card glass" style="border-left: 3px solid #64748b;">
+                        <span class="label">🎁 Desconto Clientes</span>
+                        <span class="value" style="color: #64748b; font-size: 1.5rem;">${formatCurrency(totalDescontoCliente)}</span>
+                        <small style="color: var(--text-muted);">Economia gerada total</small>
+                    </div>
+                    <div class="stat-card glass conversions" style="border-left: 3px solid #10b981;">
+                        <span class="label">🏆 Lucro Líquido</span>
+                        <span class="value" style="font-size: 1.7rem; font-weight: 900; color: ${totalLucro >= 0 ? '#10b981' : '#ef4444'};">${formatCurrency(totalLucro)}</span>
+                        <small style="color: var(--text-muted);">Margem: ${margemLiquida.toFixed(1)}%</small>
+                    </div>
+                </div>
+
+                <!-- Grafico + Tabela lado a lado -->
+                <div style="display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 1.5rem; align-items: start;">
+
+                    <!-- Grafico pizza composicao -->
+                    <div class="table-container glass" style="text-align: center;">
+                        <h3 style="font-size: 1rem; margin-bottom: 1rem;">Composição da Receita</h3>
+                        <div style="max-width: 260px; margin: 0 auto;">
+                            <canvas id="profitChart"></canvas>
+                        </div>
+                        <div style="margin-top: 1.2rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                            <div style="display:flex; justify-content:space-between; font-size:0.82rem; padding:0.5rem 0.8rem; background:rgba(16,185,129,0.08); border-radius:8px; border:1px solid rgba(16,185,129,0.2);">
+                                <span style="color:#10b981;">● Lucro Líquido</span>
+                                <strong style="color:#10b981;">${receitaTeorica > 0 ? ((totalLucro/receitaTeorica)*100).toFixed(1) : 0}%</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:0.82rem; padding:0.5rem 0.8rem; background:rgba(245,158,11,0.08); border-radius:8px; border:1px solid rgba(245,158,11,0.2);">
+                                <span style="color:#f59e0b;">● Custo Usineiro</span>
+                                <strong style="color:#f59e0b;">${receitaTeorica > 0 ? ((totalCustoUsineiro/receitaTeorica)*100).toFixed(1) : 0}%</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:0.82rem; padding:0.5rem 0.8rem; background:rgba(167,139,250,0.08); border-radius:8px; border:1px solid rgba(167,139,250,0.2);">
+                                <span style="color:#a78bfa;">● Rec. Vendedor</span>
+                                <strong style="color:#a78bfa;">${receitaTeorica > 0 ? ((totalCustoVendedor/receitaTeorica)*100).toFixed(1) : 0}%</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:0.82rem; padding:0.5rem 0.8rem; background:rgba(100,116,139,0.08); border-radius:8px; border:1px solid rgba(100,116,139,0.2);">
+                                <span style="color:#64748b;">● Desconto Cliente</span>
+                                <strong style="color:#64748b;">${receitaTeorica > 0 ? ((totalDescontoCliente/receitaTeorica)*100).toFixed(1) : 0}%</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela detalhada por cliente -->
+                    <div class="table-container glass" style="overflow-x: auto;">
+                        <h3 style="font-size: 1rem; margin-bottom: 1.2rem;">Detalhamento por Cliente Fechado</h3>
+                        ${closedClients.length > 0 ? `
+                        <table class="client-list" style="font-size: 0.82rem; min-width: 680px;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left">Cliente / Vendedor</th>
+                                    <th style="text-align:right">kWh Comp.</th>
+                                    <th style="text-align:right">Receita Líquida</th>
+                                    <th style="text-align:right">Custo Usineiro</th>
+                                    <th style="text-align:right">Rec. Vendedor</th>
+                                    <th style="text-align:right">Desc. Cliente</th>
+                                    <th style="text-align:right">💰 Lucro</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${profitRows}
+                                <tr style="border-top: 2px solid var(--panel-border); background: rgba(255,255,255,0.04);">
+                                    <td><strong>TOTAL GERAL</strong></td>
+                                    <td style="text-align:right"><strong>${totalKwhClosed.toLocaleString('pt-BR')} kWh</strong></td>
+                                    <td style="text-align:right; color:#10b981"><strong>${formatCurrency(totalReceitaBruta)}</strong></td>
+                                    <td style="text-align:right; color:#f59e0b"><strong>${formatCurrency(totalCustoUsineiro)}</strong></td>
+                                    <td style="text-align:right; color:#a78bfa"><strong>${formatCurrency(totalCustoVendedor)}</strong></td>
+                                    <td style="text-align:right; color:#64748b"><strong>${formatCurrency(totalDescontoCliente)}</strong></td>
+                                    <td style="text-align:right; font-size:1rem; color:${totalLucro >= 0 ? '#10b981' : '#ef4444'}"><strong>${formatCurrency(totalLucro)}</strong></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        ` : `<div style="text-align:center; padding:3rem; color:var(--text-muted);"><div style="font-size:2.5rem; margin-bottom:0.8rem;">📊</div><p>Nenhum contrato fechado ainda para analisar o lucro.</p></div>`}
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem; padding: 1rem 1.5rem; background: rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.15); border-radius: 12px;">
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0; line-height: 1.7;">
+                        <strong style="color: var(--accent-primary);">&#x2139;&#xFE0F; Como calculamos:</strong>
+                        <strong>Receita L&iacute;quida</strong> = kWh compens&aacute;vel &times; pre&ccedil;o kWh &times; (1 &minus; desconto%) &mdash; o que cobramos do cliente ap&oacute;s o desconto &nbsp;&middot;&nbsp;
+                        <strong>Custo Usineiro</strong> = 55% do pre&ccedil;o <em>cheio</em> do kWh (independente do desconto dado) &nbsp;&middot;&nbsp;
+                        <strong>Recorr&ecirc;ncia Vendedor</strong> = 5% da fatura original do cliente &nbsp;&middot;&nbsp;
+                        <strong>Lucro L&iacute;quido</strong> = Receita L&iacute;quida &minus; Custo Usineiro &minus; Rec. Vendedor &nbsp;&middot;&nbsp;
+                        Com desconto de 20%: margem bruta ~<strong>25%</strong>. Com desconto de 25%: margem bruta ~<strong>20%</strong>.
+                    </p>
+                </div>
+
             </div>
         </div>
     </div>`;
