@@ -269,7 +269,19 @@ body[data-theme="dark"] select option {
 .status-badge { padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-block; text-align: center; }
 .status-lead, .status-em-negociacao, .status-em-negociacao { background: rgba(37, 99, 235, 0.1); color: #2563eb; border: 1px solid rgba(37, 99, 235, 0.2); }
 .status-convertido, .status-fechado, .status-fechado { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.2); }
+.status-aguardando-assinatura { background: rgba(139, 92, 246, 0.1) !important; color: #8b5cf6 !important; border: 1px solid rgba(139, 92, 246, 0.3) !important; }
 .status-desativado, .status-perdida { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+select.status-badge {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    padding-right: 1.5rem !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 0.8rem;
+}
 
 /* Simulation Flow */
 .sim-container { max-width: 600px; margin: 0 auto; padding: 2.5rem; animation: fadeInUp 0.4s ease; }

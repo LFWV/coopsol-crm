@@ -470,7 +470,7 @@ const ViewDashboard = async () => {
     const clients = isAdmin ? allClients : allClients.filter(c => c.sellerId === currentUser.id);
     const activeClients = clients.filter(c => c.status !== 'Perdida' && c.status !== 'Desativado');
     const total = activeClients.length;
-    const converted = clients.filter(c => c.status === 'Fechado' || c.status === 'Convertido').length;
+    const converted = clients.filter(c => c.status === 'Fechado' || c.status === 'Assinado' || c.status === 'Convertido').length;
 
     let adminUsersTable = '';
     if(isAdmin) {
@@ -610,13 +610,23 @@ const renderClientRows = (filtered, isAdmin, users) => {
                 </select>
             </td>
             <td>${formatCurrency(c.billValue)}</td>
-            <td><span class="status-badge status-${clsStatus}">${c.status}</span></td>
+            <td>
+                ${isAdmin ? `
+                <select onchange="updateMainStatus('${c.id}', this.value)" class="status-badge status-${clsStatus}" style="border: none; font-family: inherit; font-size: 0.75rem; cursor: pointer; outline: none;">
+                    <option value="Em Negociação" ${c.status === 'Em Negociação' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Em Negociação</option>
+                    <option value="Aguardando assinatura" ${c.status === 'Aguardando assinatura' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Aguardando Assinatura</option>
+                    <option value="Assinado" ${c.status === 'Assinado' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Assinado</option>
+                    <option value="Fechado" ${c.status === 'Fechado' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Fechado</option>
+                    <option value="Perdida" ${c.status === 'Perdida' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Perdida</option>
+                </select>` : `<span class="status-badge status-${clsStatus}">${c.status}</span>`}
+            </td>
             <td>
                 <select onchange="updateContractStatus('${c.id}', this.value)" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); font-size: 0.75rem; border-radius: 4px; padding: 0.2rem; cursor: pointer; outline: none;">
-                    <option value="Em preparação" ${c.contractStatus === 'Em preparação' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Em preparação</option>
+                    <option value="Em preparação" ${c.contractStatus === 'Em preparação' || !c.contractStatus ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Em preparação</option>
                     <option value="Pronto" ${c.contractStatus === 'Pronto' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Pronto</option>
                     <option value="Aguardando assinatura" ${c.contractStatus === 'Aguardando assinatura' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Aguardando ass.</option>
                     <option value="Assinado" ${c.contractStatus === 'Assinado' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Assinado</option>
+                    <option value="Fechado" ${c.contractStatus === 'Fechado' ? 'selected' : ''} style="background: var(--bg-dark); color: var(--text-main);">Fechado</option>
                 </select>
             </td>
             <td>${c.discountPercent}%</td>
@@ -904,6 +914,7 @@ const ViewSimulation = async (client = null) => {
                             <option value="Pronto" ${cContract === 'Pronto'?'selected':''}>Pronto</option>
                             <option value="Aguardando assinatura" ${cContract === 'Aguardando assinatura'?'selected':''}>Aguardando assinatura</option>
                             <option value="Assinado" ${cContract === 'Assinado'?'selected':''}>Assinado</option>
+                            <option value="Fechado" ${cContract === 'Fechado'?'selected':''}>Fechado</option>
                         </select>
                     </div>
                 </div>
@@ -1619,11 +1630,31 @@ window.toggleSellerRecurrence = async (sellerId, newHasRecurrence) => {
     }
 };
 
-window.updateContractStatus = async (id, status) => {
+window.updateMainStatus = async (id, newStatus) => {
     try {
-        await db.saveClient({ id, contractStatus: status });
+        const update = { id, status: newStatus };
+        if (newStatus === 'Assinado' || newStatus === 'Fechado') {
+            update.contractStatus = (newStatus === 'Assinado') ? 'Assinado' : 'Fechado';
+            update.contractSignedAt = new Date().toISOString();
+        }
+        await db.saveClient(update);
+        invalidateCaches();
+        alert('Status principal atualizado!');
+        navigate('clients');
+    } catch(e) { alert('Erro ao atualizar status principal'); }
+};
+
+window.updateContractStatus = async (id, contractStatus) => {
+    try {
+        const update = { id, contractStatus };
+        if (contractStatus === 'Assinado' || contractStatus === 'Fechado') {
+            update.status = contractStatus;
+            update.contractSignedAt = new Date().toISOString();
+        }
+        await db.saveClient(update);
         invalidateCaches();
         alert('Status do contrato atualizado!');
+        navigate('clients');
     } catch(e) { alert('Erro ao atualizar status'); }
 };
 
@@ -1743,7 +1774,7 @@ const ViewAnalytics = async () => {
     const users = await db.getUsers();
     
     // Filtros e Cálculos
-    const closedClients = clients.filter(c => c.status === 'Fechado' || c.status === 'Convertido');
+    const closedClients = clients.filter(c => c.status === 'Fechado' || c.status === 'Assinado' || c.status === 'Convertido');
     const negClients = clients.filter(c => c.status === 'Em Negociação' || c.status === 'Em negociação' || c.status === 'Lead');
     const lostClients = clients.filter(c => c.status === 'Perdida' || c.status === 'Desativado');
 
@@ -1789,7 +1820,7 @@ const ViewAnalytics = async () => {
     allActiveDiscounts.forEach(c => {
         const d = parseFloat(c.discountPercent) || 0;
         const cKwh = parseFloat(c.kwh) || 0;
-        const isSold = (c.status === 'Fechado' || c.status === 'Convertido');
+        const isSold = (c.status === 'Fechado' || c.status === 'Assinado' || c.status === 'Convertido');
         const isNeg = (c.status === 'Em negociação' || c.status === 'Em Negociação' || c.status === 'Lead');
         
         if (isNeg) {
@@ -1889,7 +1920,7 @@ const ViewAnalytics = async () => {
 
     // Dados por Vendedor
     const sellerPerformance = users.map(u => {
-        const soldKwh = clients.filter(c => String(c.sellerId) === String(u.id) && (c.status === 'Fechado' || c.status === 'Convertido'))
+        const soldKwh = clients.filter(c => String(c.sellerId) === String(u.id) && (c.status === 'Fechado' || c.status === 'Assinado' || c.status === 'Convertido'))
                                .reduce((acc, c) => acc + (parseFloat(c.kwh) || 0), 0);
         const negKwh = clients.filter(c => String(c.sellerId) === String(u.id) && (c.status.toLowerCase() === 'em negociação' || c.status.toLowerCase() === 'lead'))
                               .reduce((acc, c) => acc + (parseFloat(c.kwh) || 0), 0);
